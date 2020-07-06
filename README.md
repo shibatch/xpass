@@ -1,0 +1,52 @@
+
+# xpass - experimental LLVM passes
+
+This is a collection of experimental optimizing passes for LLVM. It
+includes two plugins. The first one is SubstSleef, which rewrites
+calls to the standard math library to those to SLEEF. The second one
+is MathPeephole, which performs dangerous math optimizations.
+
+This project is based on the llvm-tutor package developed by Andrzej
+Warzyński.
+
+
+## Build
+
+```
+mkdir build
+cd build
+cmake -DLLVM_DIR=/usr/lib/llvm-10 ..
+make
+```
+
+## Running the passes
+
+```
+clang-10 -Xclang -load -Xclang libMathPeephole.so -ffast-math -O3 example.c
+clang-10 -Xclang -load -Xclang libSubstSleef.so -fno-math-errno -O3 example.c
+```
+
+## SubstSleef transform pass
+
+This pass substitutes vector calls to intrinsic math functions to the
+equivalent calls to SLEEF functions. In order to make this transform
+to happen, you need to specify "-O1 -fno-math-errno" flag. This pass
+only substitutes vector math calls to calls to SLEEF functions. You
+can compile test-substsleef.c under SubstSleef directory with the
+following command.
+
+```
+clang-10 -march=skylake -Xclang -load -Xclang build/lib/libSubstSleef.so -O3 -fno-math-errno test-substsleef.c -emit-llvm -S
+```
+
+You can see many vector calls to SLEEF library in test-substsleef.ll.
+
+
+## MathPeephole transform pass
+
+This pass performs the following two transforms.
+
+* a/b + c/d -> (a*d + b*c) / b*d
+* a/b + c > d -> b < 0 ^ a > b(d - c)
+
+Both transforms try to eliminate FP division operations.
