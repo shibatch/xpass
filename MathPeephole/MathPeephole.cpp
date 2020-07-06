@@ -19,8 +19,14 @@ using namespace llvm;
 
 static const int verbose = 0;
 
-#undef DEBUG_REDUCEFRAC
-#undef DEBUG_CMPDIV
+#define ENABLE_REDUCEFRAC
+//#define DEBUG_REDUCEFRAC
+
+#define ENABLE_CMPDIV
+//#define DEBUG_CMPDIV
+
+#define ENABLE_CMPZERO
+//#define DEBUG_CMPZERO
 
 //
 
@@ -79,7 +85,7 @@ struct ReduceFraction : public RewriteRule {
 
     if (!fdivOp->getFastMathFlags().isFast()) return;
 
-    unsigned beginning;
+    int beginning;
     for(beginning = seq.size()-2;beginning >= 0;beginning--) {
       BinaryOperator *op = dyn_cast<BinaryOperator>(seq[beginning]);
       if (!op) break;
@@ -133,8 +139,6 @@ struct ReduceFraction : public RewriteRule {
 
     if (countMap.count(atop) == 0) countMap.insert( { atop, 0 } );
     countMap.at(atop)++;
-
-    return;
   }
 
   bool execute(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
@@ -302,11 +306,15 @@ struct SimplifyCmpDiv : public RewriteRule {
       if (c && c->isZero()) return;
     }
 
-    unsigned beginning;
+    int beginning;
+    CmpInst *cmpInst = NULL;
     for(beginning = seq.size()-2;beginning >= 0;beginning--) {
-      if (dyn_cast<CmpInst>(seq[beginning])) break;
+      cmpInst = dyn_cast<CmpInst>(seq[beginning]);
+      if (cmpInst) break;
       if (beginning == 0) return;
     }
+
+    if (cmpInst->isEquality()) return;
 
     for(unsigned i = beginning;i<seq.size();i++) {
       if (seq[i]->getNumUses() != 1) return;
@@ -350,8 +358,6 @@ struct SimplifyCmpDiv : public RewriteRule {
 #endif
 
     arlist.push_back(ar);
-
-    return;
   }
 
   // A/B + C > D   ==>    B < 0 ^ A > B(D - C)
@@ -513,6 +519,95 @@ struct SimplifyCmpDiv : public RewriteRule {
 
 //
 
+struct AR_SimplifyCmpZero {
+  CmpInst *cmpInst;
+  bool lzero;
+  ConstantFP *constant;
+  BinaryOperator *op;
+};
+
+struct SimplifyCmpZero : public RewriteRule {
+  // a - b > 0 -> a > b
+
+  vector<AR_SimplifyCmpZero> arlist = vector<AR_SimplifyCmpZero>();
+  string name() { return "SimplifyCmpZero"; }
+  void clear() { arlist.clear(); }
+
+  void match(vector<Value *> &seq) {
+    // Matches FCmp
+    if (arlist.size() >= 1) return; // Only matches once for this rule
+
+    CmpInst *cmpInst = dyn_cast<CmpInst>(seq[seq.size()-1]);
+    if (!cmpInst) return;
+    if (cmpInst->isEquality()) return;
+
+    ConstantFP *lconst = dyn_cast<ConstantFP>(cmpInst->getOperand(0));
+    bool lzero = lconst && lconst->isZero();
+
+    ConstantFP *rconst = dyn_cast<ConstantFP>(cmpInst->getOperand(1));
+    bool rzero = rconst && rconst->isZero();
+    if (!lzero && !rzero) return;
+
+    BinaryOperator *op =
+      dyn_cast<BinaryOperator>(cmpInst->getOperand(lzero ? 1 : 0));
+
+    if (!(op && (op->getOpcode() == Instruction::FAdd ||
+		 op->getOpcode() == Instruction::FSub))) return;
+
+    if (op->getNumUses() != 1) return;
+    if (!op->getFastMathFlags().isFast()) return;
+
+    //
+
+    AR_SimplifyCmpZero ar;
+    ar.cmpInst = cmpInst;
+    ar.lzero = lzero;
+    ar.constant = lzero ? lconst : rconst;
+    ar.op = op;
+
+#ifdef DEBUG_CMPZERO
+    errs() << "SimplifyCmpZero match\n";
+    errs() << "cmpInst = " << *cmpInst << "\n";
+    errs() << "constant = " << *(ar.constant) << "\n";
+    errs() << "op = " << *op << "\n";
+    errs() << "lzero = " << lzero << "\n";
+#endif
+
+    arlist.push_back(ar);
+  }
+
+  bool execute(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
+    if (arlist.size() == 0) return false;
+
+    AR_SimplifyCmpZero ar = arlist[0];
+
+    if (ar.op->getOpcode() == Instruction::FSub) {
+      ar.cmpInst->setOperand(ar.lzero ? 0 : 1, ar.op->getOperand(1));
+      ar.cmpInst->setOperand(ar.lzero ? 1 : 0, ar.op->getOperand(0));
+    } else {
+      assert(ar.op->getOpcode() == Instruction::FAdd);
+
+      IRBuilder<> builder(ar.cmpInst);
+      builder.setFastMathFlags(ar.cmpInst->getFastMathFlags());
+
+      Value *v = builder.CreateFNeg(ar.op->getOperand(1));
+      ar.cmpInst->setOperand(ar.lzero ? 0 : 1, v);
+      ar.cmpInst->setOperand(ar.lzero ? 1 : 0, ar.op->getOperand(0));
+    }
+
+    ar.op->setOperand(0, UndefValue::get(ar.op->getType()));
+    ar.op->setOperand(1, UndefValue::get(ar.op->getType()));
+    assert(ar.op->getNumUses() == 0);
+    eraseList.insert(ar.op);
+
+    nRewrite++;
+
+    return true;
+  }
+};
+
+//
+
 static bool initialized = false;
 static vector<shared_ptr<RewriteRule>> rules;
 
@@ -525,8 +620,17 @@ struct MathPeephole : public FunctionPass {
     if (!initialized) {
       initialized = true;
 
+#ifdef ENABLE_CMPZERO
+      rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpZero()));
+#endif
+
+#ifdef ENABLE_REDUCEFRAC
       rules.push_back(shared_ptr<RewriteRule>(new ReduceFraction()));
+#endif
+
+#ifdef ENABLE_CMPDIV
       rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpDiv()));
+#endif
     }
   }
 
