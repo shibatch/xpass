@@ -13,6 +13,7 @@ Warzyński.
 ## Build
 
 ```
+sudo apt-get install clang-10 llvm-10 llvm-10-dev llvm-10-tools libstdc++-10-dev cmake
 mkdir build
 cd build
 cmake -DLLVM_DIR=/usr/lib/llvm-10 ..

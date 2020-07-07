@@ -1,0 +1,30 @@
+language: c
+
+# Default linux jobs
+os: linux
+sudo: required
+dist: bionic
+
+matrix:
+  include:
+    - os: linux
+      arch: amd64
+      addons:
+        apt:
+          packages:
+            - clang-10 llvm-10 llvm-10-dev llvm-10-tools libstdc++-10-dev
+        - CC=clang-10
+        - CXX=clang++-10
+
+before_install:
+     - cd ${TRAVIS_BUILD_DIR}
+     - wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | sudo apt-key add -
+     - sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ bionic main'
+     - sudo apt-get -y install cmake
+     - mkdir build && cd build
+     - cmake ..
+
+script:
+     - cd ${TRAVIS_BUILD_DIR}/build
+     - make -j `nproc`
+     - ctest -j `nproc`
