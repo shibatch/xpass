@@ -1,5 +1,6 @@
+[![Build Status](https://travis-ci.org/shibatch/xpass.svg?branch=master)](https://travis-ci.org/shibatch/xpass)
 
-# xpass - experimental LLVM passes
+# XPASS - experimental LLVM passes
 
 This is a collection of experimental optimizing passes for LLVM. It
 includes two plugins. The first one is SubstSleef, which rewrites
