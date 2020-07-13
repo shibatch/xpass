@@ -36,8 +36,6 @@ double randm11() {
 }
 
 int main(int argc, char **argv) {
-  srand(time(NULL));
-
   for(int i=0;i<1000000;i++) {
     double a = randm11();
     double b = randm11();

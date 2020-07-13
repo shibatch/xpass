@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <cmath>
+#include <chrono>
 
 #define NTEST 100
 #define DEPTHMAX 100
@@ -221,7 +222,11 @@ Logic* Logic::generate(int depth, Number *num) {
 }
 
 int main(int argc, char **argv) {
-  srand(time(NULL));
+  auto duration = std::chrono::system_clock::now().time_since_epoch();
+  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+  srand(millis);
+  cout << "// Seed : " << millis << "\n";
+
   Number *x = new Number();
   Logic *y = new Logic();
 
