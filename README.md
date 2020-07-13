@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/shibatch/xpass.svg?branch=master)](https://travis-ci.org/shibatch/xpass)
 
-# XPASS - experimental LLVM passes
+# XPASS - Experimental LLVM passes
 
 This is a collection of experimental optimizing passes for LLVM. It
 includes two plugins. The first one is SubstSleef, which rewrites
@@ -46,9 +46,8 @@ You can see many vector calls to SLEEF library in test-substsleef.ll.
 
 ## MathPeephole transform pass
 
-This pass performs the following two transforms.
+This pass performs the following transforms.
 
-* a/b + c/d -> (a*d + b*c) / b*d
-* a/b + c > d -> b < 0 ^ a > b(d - c)
-
-Both transforms try to eliminate FP division operations.
+* a/b + c/d  ->  (ad + bc) / (bd)
+* x/y + z > a/b + c  ->  (xb - ay) / (yb) + z > c
+* a/b + c > d  ->  b < 0 ^ a > b(d - c)

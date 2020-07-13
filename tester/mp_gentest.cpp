@@ -9,7 +9,7 @@
 #include <cmath>
 
 #define NTEST 100
-#define DEPTHMAX 50
+#define DEPTHMAX 100
 #define NCHECK 20
 
 #define NARGS 4
