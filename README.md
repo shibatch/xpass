@@ -51,3 +51,4 @@ This pass performs the following transforms.
 * a/b + c/d  ->  (ad + bc) / (bd)
 * x/y + z > a/b + c  ->  (xb - ay) / (yb) + z > c
 * a/b + c > d  ->  b < 0 ^ a > b(d - c)
+* w sqrt(x) + y > z  ->  (z < y) ^ (((w >= 0) ^ (z < y)) && (wwx > (z-y)(z-y)))

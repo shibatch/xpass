@@ -15,7 +15,7 @@
 
 #define NARGS 4
 #define NBINOP 4
-#define NUOP 1
+#define NUOP 2
 #define NLBINOP 2
 #define NCMPOP 6
 
@@ -108,6 +108,7 @@ struct UOp : public Number {
   double eval(Args &a) {
     switch(opcode) {
     case (NBINOP + 0): return -op->eval(a);
+    case (NBINOP + 1): return sqrt(fabs(op->eval(a)));
     default : abort();
     }
   }
@@ -115,6 +116,7 @@ struct UOp : public Number {
   string toString() {
     switch(opcode) {
     case (NBINOP + 0): return "(-" + op->toString() + ")";
+    case (NBINOP + 1): return "sqrt(fabs(" + op->toString() + "))";
     default: abort();
     }
   }
@@ -233,6 +235,7 @@ int main(int argc, char **argv) {
   //
 
   cout << "#include <stdbool.h>\n";
+  cout << "#include <math.h>\n";
   cout << "\n#ifdef TEST\n";
 
   for(int i=0;i<NTEST;i++) cout << "#define f" << i << "c f" << i << "t\n";

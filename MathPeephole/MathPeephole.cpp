@@ -14,6 +14,7 @@ using namespace llvm;
 #include <unordered_map>
 #include <unordered_set>
 #include <cassert>
+#include <cstdlib>
 
 //
 
@@ -27,6 +28,9 @@ static const int verbose = 0;
 
 #define ENABLE_CMPDIV
 //#define DEBUG_CMPDIV
+
+#define ENABLE_CMPSQRT
+//#define DEBUG_CMPSQRT
 
 #define ENABLE_CMPZERO
 //#define DEBUG_CMPZERO
@@ -57,6 +61,15 @@ struct RewriteRule {
   }
 };
 
+// Utility functions
+
+bool checkInstOrder(BasicBlock &BB, Instruction *early, Instruction *late) {
+  for (Instruction &inst : BB) {
+    if (&inst == early) return true;
+    if (&inst == late) return false;
+  }
+  abort();
+}
 //
 
 struct AR_ReduceFraction {
@@ -397,19 +410,10 @@ struct ReduceFraction2 : public RewriteRule {
 
     BinaryOperator *fdivOp0 = dyn_cast<BinaryOperator>((*pseq0)[(*pseq0).size()-1]);
     BinaryOperator *fdivOp1 = dyn_cast<BinaryOperator>((*pseq1)[(*pseq1).size()-1]);
-    
-    for (Instruction &inst : BB) {
-      if (&inst == fdivOp0) break;
-      if (&inst == fdivOp1) {
-	BinaryOperator *t = fdivOp0;
-	fdivOp0 = fdivOp1;
-	fdivOp1 = t;
-	vector<Value *> *p = pseq0;
-	pseq0 = pseq1;
-	pseq1 = p;
-	break;
-      }
-      // fdivOp1 comes later than fdivOp0
+
+    if (!checkInstOrder(BB, fdivOp0, fdivOp1)) {
+      swap(fdivOp0, fdivOp1);
+      swap(pseq0, pseq1);
     }
 
     bool negative0 = false;
@@ -499,7 +503,10 @@ struct SimplifyCmpDiv : public RewriteRule {
     if (!fdivOp || fdivOp->getOpcode() != Instruction::FDiv) return;
     if (fdivOp->getOperand(0) == fdivOp->getOperand(1)) return;
     if (!fdivOp->getFastMathFlags().isFast()) return;
-
+    if (!fdivOp->getType()->isFloatTy() && !fdivOp->getType()->isDoubleTy()) {
+      errs() << *(fdivOp->getType()) << "\n";
+      return;
+    }
     {
       ConstantFP *c = dyn_cast<ConstantFP>(fdivOp->getOperand(1));
       if (c && c->isZero()) return;
@@ -514,14 +521,17 @@ struct SimplifyCmpDiv : public RewriteRule {
     }
 
     if (cmpInst->isEquality()) return;
+    if (!cmpInst->isFast()) return;
 
-    for(int i = beginning;i<seq.size();i++) {
+    for(int i = beginning+1;i<seq.size();i++) {
       if (seq[i]->getNumUses() != 1) return;
+      BinaryOperator *op = dyn_cast<BinaryOperator>(seq[i]);
+      if (!(op && op->isFast())) return;
     }
 
     AR_SimplifyCmpDiv ar;
 
-    unsigned i;
+    int i;
     for(i=beginning+1;i<seq.size()-1;i++) {
       BinaryOperator *op = dyn_cast<BinaryOperator>(seq[i]);
       if (!op) return;
@@ -655,7 +665,21 @@ struct SimplifyCmpDiv : public RewriteRule {
 
     builder.SetInsertPoint(cmpInst);
 
-    Value *cmpInst2 = builder.CreateFCmpOLT(bval, ConstantFP::get(bval->getType(), 0));
+    Type *fpType = fdivOp->getType(), *intType;
+    Value *maskVal;
+
+    if (fpType->isFloatTy()) {
+      intType = Type::getInt32Ty(BB.getContext());
+      maskVal = ConstantInt::get(intType, 1UL << 31);
+    } else {
+      assert(fpType->isDoubleTy());
+      intType = Type::getInt64Ty(BB.getContext());
+      maskVal = ConstantInt::get(intType, 1UL << 63);
+    }
+
+    Value *bitCast1 = builder.CreateBitCast(bval, intType);
+    Value *signBit = builder.CreateAnd(bitCast1, maskVal);
+    if (negativeB ^ dvalOnLeft) signBit = builder.CreateXor(signBit, maskVal);
 
     Value *dminusc = dval;
     if (cval != NULL && !negativeC) {
@@ -663,29 +687,211 @@ struct SimplifyCmpDiv : public RewriteRule {
     } else if (cval != NULL && negativeC) {
       dminusc = builder.CreateFAdd(dval, cval);
     }
-
     if (negativeB) dminusc = builder.CreateFNeg(dminusc);
-
     Value *fmulInst = builder.CreateFMul(bval, dminusc);
 
-    CmpInst::Predicate pred  = cmpInst->getPredicate();
-    if (negativeB ^ dvalOnLeft) pred = (CmpInst::getInversePredicate(pred));
-    Value *cmpInst3 = builder.CreateFCmp(pred, aval, fmulInst);
-    Value *xorInst  = builder.CreateXor(cmpInst2, cmpInst3);
+    Value *left = builder.CreateBitCast(aval, intType);
+    left = builder.CreateXor(left, signBit);
+    left = builder.CreateBitCast(left, fpType);
 
-    cmpInst->replaceAllUsesWith(xorInst);
+    Value *right = builder.CreateBitCast(fmulInst, intType);
+    right = builder.CreateXor(right, signBit);
+    right = builder.CreateBitCast(right, fpType);
+
+    Value *cmpInst2 = builder.CreateFCmp(cmpInst->getPredicate(), left, right);
+
+    cmpInst->replaceAllUsesWith(cmpInst2);
+
+    assert(cmpInst->getNumUses() == 0);
+    cmpInst->setOperand(0, UndefValue::get(cmpInst->getType()));
+    cmpInst->setOperand(1, UndefValue::get(cmpInst->getType()));
+    eraseList.insert(cmpInst);
+
+    assert(fdivOp->getNumUses() == 0);
+    eraseList.insert(fdivOp);
+
+    nRewrite++;
+
+    return true;
+  }
+};
+
+//
+
+struct AR_SimplifyCmpSqrt {
+  vector<Value *> seq = vector<Value *>();
+  Instruction *atop = NULL, *mtop = NULL;
+};
+
+struct SimplifyCmpSqrt : public RewriteRule {
+  // w*sqrt(x) + y >  z  ->  (z <  y) ^ (((w >= 0) ^ (z <  y)) && (w*w*x > (z-y)*(z-y)))
+  // w*sqrt(x) + y <  z  ->  (z >  y) ^ (((w <  0) ^ (z >  y)) && (w*w*x > (z-y)*(z-y)))
+  // w*sqrt(x) + y >= z  ->  (z <= y) ^ (((w >= 0) ^ (z <= y)) && (w*w*x > (z-y)*(z-y)))
+  // w*sqrt(x) + y <= z  ->  (z >= y) ^ (((w <  0) ^ (z >= y)) && (w*w*x > (z-y)*(z-y)))
+
+  vector<AR_SimplifyCmpSqrt> arlist = vector<AR_SimplifyCmpSqrt>();
+  string name() { return "SimplifyCmpSqrt"; }
+  void clear() { arlist.clear(); }
+
+  void match(vector<Value *> &seq) {
+    // Matches FCmp FAdd* FMul* SQRT
+    if (seq.size() < 2) return;
+    if (arlist.size() >= 1) return; // Only matches once for this rule
+
+    CallInst *callInst = dyn_cast<CallInst>(seq[seq.size()-1]);
+    if (!callInst || !callInst->isFast()) return;
+    Function *calledFunc = callInst->getCalledFunction();
+    if (!calledFunc) return;
+    if (calledFunc->getIntrinsicID() != Intrinsic::sqrt) return;
+
+    int beginning;
+    CmpInst *cmpInst = NULL;
+    for(beginning = seq.size()-2;beginning >= 0;beginning--) {
+      cmpInst = dyn_cast<CmpInst>(seq[beginning]);
+      if (cmpInst) break;
+      if (beginning == 0) return;
+    }
+
+    if (cmpInst->isEquality()) return;
+
+    for(int i = beginning;i<seq.size();i++) {
+      if (seq[i]->getNumUses() != 1) return;
+      Instruction *inst = dyn_cast<Instruction>(seq[i]);
+      if (!(inst && inst->getFastMathFlags().isFast())) return;
+    }
+
+    AR_SimplifyCmpSqrt ar;
+
+    int i;
+    for(i=beginning+1;i<seq.size()-1;i++) {
+      BinaryOperator *op = dyn_cast<BinaryOperator>(seq[i]);
+      if (!op) return;
+      if (op->getOpcode() == Instruction::FMul) {
+	ar.mtop = op;
+	break;
+      }
+
+      if (op->getOpcode() != Instruction::FAdd &&
+	  op->getOpcode() != Instruction::FSub) return;
+
+      if (ar.atop == NULL) ar.atop = op;
+    }
+
+    for(;i<seq.size()-1;i++) {
+      BinaryOperator *op = dyn_cast<BinaryOperator>(seq[i]);
+      if (!op) return;
+      if (op->getOpcode() != Instruction::FMul) return;
+    }
+
+    for(i=beginning;i<seq.size();i++) ar.seq.push_back(seq[i]);
+
+#ifdef DEBUG_CMPSQRT
+    errs() << "SimplifyCmpSqrt match\n";
+    for(i=beginning;i<seq.size();i++) errs() << *(seq[i]) << "\n";
+    errs() << "\n";
+#endif
+
+    arlist.push_back(ar);
+  }
+
+  virtual bool execute(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
+    if (arlist.size() == 0) return false;
+
+    AR_SimplifyCmpSqrt ar = arlist[0];
+    vector<Value *> &q = ar.seq;
+
+    CmpInst *cmpInst = dyn_cast<CmpInst>(q[0]);
+    CallInst *callInst = dyn_cast<CallInst>(q[q.size()-1]);
+    assert(cmpInst && callInst);
+
+    IRBuilder<> builder(cmpInst);
+    builder.setFastMathFlags(cmpInst->getFastMathFlags());
+
+#ifdef DEBUG_CMPSQRT
+    if (ar.atop != NULL)  errs() << "SimplifyCmpSqrt : atop  : " << *(ar.atop)  << "\n";
+    else errs() << "SimplifyCmpSqrt : atop  : NULL\n";
+    if (ar.mtop != NULL)  errs() << "SimplifyCmpSqrt : mtop  : " << *(ar.mtop)  << "\n";
+    else errs() << "SimplifyCmpSqrt : mtop  : NULL\n";
+#endif
+
+    bool negative = false;
+    if (ar.atop) {
+      for(int i=1;i<q.size()-1;i++) {
+	BinaryOperator *op = dyn_cast<BinaryOperator>(q[i]);
+	if (op && op->getOpcode() == Instruction::FSub &&
+	    op->getOperand(1) == q[i+1]) negative = !negative;
+      }
+    }
+
+    Value *yval = ar.atop;
+    if (!yval) yval = ConstantFP::get(callInst->getType(), 0);
+
+    Value *zval;
+    bool zvalOnLeft;
+    if (ar.atop  == cmpInst->getOperand(0) ||
+	ar.mtop  == cmpInst->getOperand(0) ||
+	callInst == cmpInst->getOperand(0)) {
+      zval = cmpInst->getOperand(1);
+      zvalOnLeft = false;
+    } else {
+      zval = cmpInst->getOperand(0);
+      zvalOnLeft = true;
+    }
+
+    Value *wval = ar.mtop, *xval = callInst->getArgOperand(0);
+    callInst->setArgOperand(0, UndefValue::get(xval->getType()));
+
+    if (ar.mtop) {
+      ar.mtop->replaceAllUsesWith(ConstantFP::get(callInst->getType(), 0));
+      callInst->replaceAllUsesWith(ConstantFP::get(callInst->getType(), 1));
+      if (negative) wval = builder.CreateFNeg(wval);
+    } else {
+      callInst->replaceAllUsesWith(ConstantFP::get(callInst->getType(), 0));
+      if (negative) wval = ConstantFP::get(callInst->getType(), -1);
+      else wval = ConstantFP::get(callInst->getType(), 1);
+    }
+
+#ifdef DEBUG_CMPSQRT
+    errs() << "SimplifyCmpSqrt : wval = " << *wval << "\n";
+    errs() << "SimplifyCmpSqrt : xval = " << *xval << "\n";
+    errs() << "SimplifyCmpSqrt : yval = " << *yval << "\n";
+    errs() << "SimplifyCmpSqrt : zval = " << *zval << "\n";
+    errs() << "SimplifyCmpSqrt : negative = " << negative << "\n";
+    errs() << "SimplifyCmpSqrt : zvalOnLeft = " << zvalOnLeft << "\n";
+#endif
+
+    // w*sqrt(x) + y > z  ->
+    // (z < y) ^ (((w >= 0) ^ (z < y)) && ((w*w)*x > (z - y)*(z - y)))
+
+    CmpInst::Predicate pred = cmpInst->getPredicate();
+    if (zvalOnLeft) pred = CmpInst::getSwappedPredicate(pred);
+    Value *cmpInstZY = builder.CreateFCmp(pred, yval, zval);
+    Value *cmpInstW0;
+    if (pred == CmpInst::Predicate::FCMP_OLT ||
+	pred == CmpInst::Predicate::FCMP_OLE ||
+	pred == CmpInst::Predicate::FCMP_ULT ||
+	pred == CmpInst::Predicate::FCMP_ULE) {
+      cmpInstW0 = builder.CreateFCmpOLT(wval, ConstantFP::get(wval->getType(), 0));
+    } else {
+      cmpInstW0 = builder.CreateFCmpOGE(wval, ConstantFP::get(wval->getType(), 0));
+    }
+    Value *wtimesw = builder.CreateFMul(wval, wval);
+    Value *wwx = builder.CreateFMul(wtimesw, xval);
+    Value *zminusy = builder.CreateFSub(zval, yval);
+    Value *zminusysqu = builder.CreateFMul(zminusy, zminusy);
+    Value *cmpInst2 = builder.CreateFCmpOGT(wwx, zminusysqu);
+
+    Value *xorInst1 = builder.CreateXor(cmpInstW0, cmpInstZY);
+    Value *andInst1 = builder.CreateAnd(xorInst1, cmpInst2);
+    Value *xorInst2 = builder.CreateXor(cmpInstZY, andInst1);
+
+    cmpInst->replaceAllUsesWith(xorInst2);
 
     cmpInst->setOperand(0, UndefValue::get(cmpInst->getType()));
     cmpInst->setOperand(1, UndefValue::get(cmpInst->getType()));
     eraseList.insert(cmpInst);
 
-    if (fdivOp->getNumUses() <= 1) {
-      eraseList.insert(fdivOp);
-    } else {
-#ifdef DEBUG_CMPDIV
-      errs() << "fdivOp has " << fdivOp->getNumUses() << "uses\n";
-#endif
-    }
+    eraseList.insert(callInst);
 
     nRewrite++;
 
@@ -715,6 +921,7 @@ struct SimplifyMulDiv : public RewriteRule {
       dyn_cast<BinaryOperator>(seq[seq.size()-1]);
 
     if (!(fdivOp && (fdivOp->getOpcode() == Instruction::FDiv))) return;
+    if (!fdivOp->getFastMathFlags().isFast()) return;
 
     int beginning;
     for(beginning = seq.size()-2;beginning >= 0;beginning--) {
@@ -765,6 +972,8 @@ struct SimplifyMulDiv : public RewriteRule {
       assert(mbot->getOperand(1) == fdivOp);
       mbot->setOperand(1, ConstantFP::get(mbot->getType(), 1));
     }
+
+    fdivOp->moveAfter(mtop);
 
     IRBuilder<> builder(fdivOp);
     builder.setFastMathFlags(fdivOp->getFastMathFlags());
@@ -899,8 +1108,14 @@ struct MathPeephole : public FunctionPass {
 #ifdef ENABLE_CMPDIV
       rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpDiv()));
 #endif
+
+#ifdef ENABLE_CMPSQRT
+      rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpSqrt()));
+#endif
     }
   }
+
+  ~MathPeephole() { rules.clear(); }
 
   void traverse(BasicBlock &BB, vector<Value *> &seq, unordered_set<Instruction *> &eraseList) {
     Value *val = seq[seq.size()-1];

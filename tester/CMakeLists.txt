@@ -16,5 +16,6 @@ add_library(obj_mp_generated_wo_pass OBJECT ${MP_GENERATED_C})
 
 add_executable(mp_tester mp_tester.c
   $<TARGET_OBJECTS:obj_mp_generated_w_pass> $<TARGET_OBJECTS:obj_mp_generated_wo_pass>)
+target_link_libraries(mp_tester PUBLIC m)
 
 add_test(NAME "MathPeephole" COMMAND mp_tester)
