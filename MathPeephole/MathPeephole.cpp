@@ -1117,8 +1117,12 @@ struct MathPeephole : public FunctionPass {
 
   ~MathPeephole() { rules.clear(); }
 
-  void traverse(BasicBlock &BB, vector<Value *> &seq, unordered_set<Instruction *> &eraseList) {
+  void traverse(BasicBlock &BB, vector<Value *> &seq, unordered_set<Instruction *> &eraseList, unordered_set<Value *> &visited) {
     Value *val = seq[seq.size()-1];
+
+    // Visit each instruction only once
+    if (visited.count(val) != 0) return; 
+    visited.insert(val);
 
     Instruction *inst = dyn_cast<Instruction>(val);
     if (inst && eraseList.count(inst) != 0) return;
@@ -1129,8 +1133,9 @@ struct MathPeephole : public FunctionPass {
       for(unsigned i=0;i<inst->getNumOperands();i++) {
 	Instruction *inst2 = dyn_cast<Instruction>(inst->getOperand(i));
 	if (inst2 && inst2->getParent() != &BB) continue;
+	if (inst2 && dyn_cast<PHINode>(inst2)) continue;
 	seq.push_back(inst->getOperand(i));
-	traverse(BB, seq, eraseList);
+	traverse(BB, seq, eraseList, visited);
 	seq.pop_back();
       }
     }
@@ -1195,7 +1200,9 @@ struct MathPeephole : public FunctionPass {
 	  vector<Value *> seq = vector<Value *>();
 	  seq.push_back(root);
 
-	  traverse(BB, seq, eraseList);
+	  unordered_set<Value *> visited = unordered_set<Value *>();
+
+	  traverse(BB, seq, eraseList, visited);
 
 	  for(shared_ptr<RewriteRule> rule : rules) {
 	    bool rewritten = false;
