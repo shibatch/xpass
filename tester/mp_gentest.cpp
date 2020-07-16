@@ -24,6 +24,8 @@ using namespace std;
 double rand01() { return rand() / (double)RAND_MAX; }
 double randm11() { return rand() / (double)RAND_MAX * 2 - 1; }
 
+string asqrtfunc = "asqrt";
+
 struct Args {
   vector<double> args = vector<double>(NARGS);
   Args() { for(int i=0;i<NARGS;i++) args[i] = randm11(); }
@@ -116,7 +118,7 @@ struct UOp : public Number {
   string toString() {
     switch(opcode) {
     case (NBINOP + 0): return "(-" + op->toString() + ")";
-    case (NBINOP + 1): return "sqrt(fabs(" + op->toString() + "))";
+    case (NBINOP + 1): return asqrtfunc + "(" + op->toString() + ")";
     default: abort();
     }
   }
@@ -229,20 +231,50 @@ int main(int argc, char **argv) {
   srand(millis);
   cout << "// Seed : " << millis << "\n";
 
+  string fptype = "double";
+  string booltype = "bool";
+
+  if (argc > 1) fptype = argv[1];
+  if (argc > 2) booltype = argv[2];
+  if (argc > 3) asqrtfunc = argv[3];
+
   Number *x = new Number();
   Logic *y = new Logic();
 
   //
 
   cout << "#include <stdbool.h>\n";
-  cout << "#include <math.h>\n";
-  cout << "\n#ifdef TEST\n";
+  cout << "#include <math.h>\n\n";
+
+  cout << "typedef double double2 __attribute__((ext_vector_type(2)));\n";
+  cout << "typedef long int2 __attribute__((ext_vector_type(2)));\n";
+  cout << "typedef float float4 __attribute__((ext_vector_type(4)));\n";
+  cout << "typedef int int4 __attribute__((ext_vector_type(4)));\n\n";
+
+  cout << "static __attribute__((always_inline)) double asqrt(double x) {\n";
+  cout << "  return sqrt(fabs(x));\n";
+  cout << "}\n\n";
+
+  cout << "static __attribute__((always_inline)) float asqrtf(float x) {\n";
+  cout << "  return sqrtf(fabsf(x));\n";
+  cout << "}\n\n";
+
+  cout << "static __attribute__((always_inline)) double2 asqrt2(double2 x) {\n";
+  cout << "  return (double2) { sqrt(fabs(x[0])), sqrt(fabs(x[1])) };\n";
+  cout << "}\n\n";
+
+  cout << "static __attribute__((always_inline)) float4 asqrtf4(float4 x) {\n";
+  cout << "  return (float4) { sqrtf(fabsf(x[0])), sqrtf(fabsf(x[1])), sqrtf(fabsf(x[2])), sqrtf(fabsf(x[3])) };\n";
+  cout << "}\n\n";
+
+  cout << "#ifdef TEST\n";
 
   for(int i=0;i<NTEST;i++) cout << "#define f" << i << "c f" << i << "t\n";
   cout << "#endif\n\n";
 
   for(int i=0;i<NTEST;i++) {
-    cout << "bool f" << i << "c(double a0, double a1, double a2, double a3) {\n";
+    cout << booltype << " f" << i << "c(" << fptype << " a0, " << fptype <<
+      " a1, " << fptype << " a2, " << fptype << " a3) {\n";
     cout << "  return ";
 
     Logic *l;

@@ -93,9 +93,7 @@ struct ReduceFraction : public RewriteRule {
     if (seq.size() < 2) return;
 
     BinaryOperator *fdivOp = dyn_cast<BinaryOperator>(seq[seq.size()-1]);
-    if (!fdivOp) return;
-    if (fdivOp->getOpcode() != Instruction::FDiv) return;
-    if (fdivOp->getOperand(0) == fdivOp->getOperand(1)) return;
+    if (!fdivOp || fdivOp->getOpcode() != Instruction::FDiv) return;
 
     {
       ConstantFP *c = dyn_cast<ConstantFP>(fdivOp->getOperand(1));
@@ -292,7 +290,6 @@ struct ReduceFraction2 : public RewriteRule {
 
     BinaryOperator *fdivOp = dyn_cast<BinaryOperator>(seq[seq.size()-1]);
     if (!fdivOp || fdivOp->getOpcode() != Instruction::FDiv) return;
-    if (fdivOp->getOperand(0) == fdivOp->getOperand(1)) return;
     if (!fdivOp->getFastMathFlags().isFast()) return;
 
     {
@@ -501,15 +498,12 @@ struct SimplifyCmpDiv : public RewriteRule {
 
     BinaryOperator *fdivOp = dyn_cast<BinaryOperator>(seq[seq.size()-1]);
     if (!fdivOp || fdivOp->getOpcode() != Instruction::FDiv) return;
-    if (fdivOp->getOperand(0) == fdivOp->getOperand(1)) return;
     if (!fdivOp->getFastMathFlags().isFast()) return;
-    if (!fdivOp->getType()->isFloatTy() && !fdivOp->getType()->isDoubleTy()) {
-      errs() << *(fdivOp->getType()) << "\n";
-      return;
-    }
-    {
-      ConstantFP *c = dyn_cast<ConstantFP>(fdivOp->getOperand(1));
-      if (c && c->isZero()) return;
+    if (!fdivOp->getType()->isVectorTy() &&
+	!fdivOp->getType()->isFloatTy() && !fdivOp->getType()->isDoubleTy()) return;
+    if (fdivOp->getType()->isVectorTy()) {
+      VectorType *vt = dyn_cast<VectorType>(fdivOp->getType());
+      if (!vt->getElementType()->isFloatTy() && !vt->getElementType()->isDoubleTy()) return;
     }
 
     int beginning;
@@ -668,13 +662,29 @@ struct SimplifyCmpDiv : public RewriteRule {
     Type *fpType = fdivOp->getType(), *intType;
     Value *maskVal;
 
-    if (fpType->isFloatTy()) {
-      intType = Type::getInt32Ty(BB.getContext());
-      maskVal = ConstantInt::get(intType, 1UL << 31);
+    if (!fdivOp->getType()->isVectorTy()) {
+      if (fpType->isFloatTy()) {
+	intType = Type::getInt32Ty(BB.getContext());
+	maskVal = ConstantInt::get(intType, 1UL << 31);
+      } else {
+	assert(fpType->isDoubleTy());
+	intType = Type::getInt64Ty(BB.getContext());
+	maskVal = ConstantInt::get(intType, 1UL << 63);
+      }
     } else {
-      assert(fpType->isDoubleTy());
-      intType = Type::getInt64Ty(BB.getContext());
-      maskVal = ConstantInt::get(intType, 1UL << 63);
+      VectorType *vt = dyn_cast<VectorType>(fdivOp->getType());
+      Type *et = vt->getElementType();
+      ElementCount ec = vt->getElementCount();
+      if (et->isFloatTy()) {
+	intType = VectorType::get(Type::getInt32Ty(BB.getContext()), ec);
+	maskVal = ConstantVector::getSplat(ec.Min, 
+          ConstantInt::get(Type::getInt32Ty(BB.getContext()), 1UL << 31));
+      } else {
+	assert(et->isDoubleTy());
+	intType = VectorType::get(Type::getInt64Ty(BB.getContext()), ec);
+	maskVal = ConstantVector::getSplat(ec.Min,
+          ConstantInt::get(Type::getInt64Ty(BB.getContext()), 1UL << 63));
+      }
     }
 
     Value *bitCast1 = builder.CreateBitCast(bval, intType);
@@ -958,8 +968,6 @@ struct SimplifyMulDiv : public RewriteRule {
 
     AR_SimplifyMulDiv ar = arlist[0];
 
-    // (a / b) * c -> (a * c) / b
-
     BinaryOperator *fdivOp = dyn_cast<BinaryOperator>(ar.seq[ar.seq.size()-1]);
     BinaryOperator *mtop = dyn_cast<BinaryOperator>(ar.seq[0]);
     BinaryOperator *mbot = dyn_cast<BinaryOperator>(ar.seq[ar.seq.size()-2]);
@@ -1115,7 +1123,7 @@ struct MathPeephole : public FunctionPass {
     }
   }
 
-  ~MathPeephole() { rules.clear(); }
+  ~MathPeephole() { rules.clear(); initialized = false; }
 
   void traverse(BasicBlock &BB, vector<Value *> &seq, unordered_set<Instruction *> &eraseList, unordered_set<Value *> &visited) {
     Value *val = seq[seq.size()-1];
@@ -1143,6 +1151,12 @@ struct MathPeephole : public FunctionPass {
 
   bool runOnFunction(Function &F) override {
     if (F.isDeclaration()) return false;
+
+    if (!F.getAttributes().getFnAttributes().hasAttribute("unsafe-fp-math") ||
+	F.getAttributes().getFnAttributes().getAttribute("unsafe-fp-math").getValueAsString() != "true") {
+      if (verbose >= 3) errs() << "Skipping " << F.getName() << "\n";
+      return false;
+    }
 
     if (verbose >= 3) errs() << F << "\n";
 
@@ -1256,7 +1270,7 @@ static RegisterPass<MathPeephole> X("Xmath-peephole", "Mathematical peephole opt
                              false /* Analysis Pass */);
 
 static RegisterStandardPasses Y(
-    PassManagerBuilder::EP_VectorizerStart,
+    PassManagerBuilder::EP_OptimizerLast,
     [](const PassManagerBuilder &Builder,
        legacy::PassManagerBase &PM) { PM.add(new MathPeephole()); });
 
@@ -1266,4 +1280,4 @@ static void loadPass(const PassManagerBuilder &Builder, legacy::PassManagerBase 
   PM.add(new MathPeephole());
 }
 
-static RegisterStandardPasses clangtoolLoader_Ox(PassManagerBuilder::EP_VectorizerStart, loadPass);
+static RegisterStandardPasses clangtoolLoader_Ox(PassManagerBuilder::EP_OptimizerLast, loadPass);

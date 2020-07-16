@@ -1,42 +1,90 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <math.h>
 #include <time.h>
 
-extern bool comparison1c(double v, double w, double x, double y, double z);
-extern bool comparison2c(double v, double w, double x, double y, double z);
-extern bool comparison3c(double v, double w, double x, double y, double z);
-extern bool comparison4c(double v, double w, double x, double y, double z);
-extern bool comparison5c(double v, double w, double x, double y, double z);
-extern bool comparison6c(double a, double b, double c, double d, double e);
+static uint64_t xseed = 1234567890123456789ULL;
 
-extern bool comparison1t(double v, double w, double x, double y, double z);
-extern bool comparison2t(double v, double w, double x, double y, double z);
-extern bool comparison3t(double v, double w, double x, double y, double z);
-extern bool comparison4t(double v, double w, double x, double y, double z);
-extern bool comparison5t(double v, double w, double x, double y, double z);
-extern bool comparison6t(double a, double b, double c, double d, double e);
+static uint32_t xrand() {
+  xseed = xseed * 6364136223846793005ULL + 1;
+  return xseed >> 32;
+}
 
-#define TEST(x) do {							\
-  extern bool f ## x ## c(double, double, double, double);		\
-  extern bool f ## x ## t(double, double, double, double);		\
-  if (f ## x ## c(a, b, c, d) != f ## x ## t(a, b, c, d)) {		\
-  printf(#x " : %g %g %g %g\n", a, b, c, d);				\
-  exit(-1);								\
-  }									\
-  } while(0)
-  
-double randm11() {
+static double randm11() {
   double r;
   do {
-    r = rand() / (double)RAND_MAX * 2 - 1;
+    r = xrand() / (double)(1ULL << 32) * 2 - 1;
   } while(fabs(r) < 1e-3);
   return r;
 }
 
+#ifdef DOUBLE
+#define TEST(x) do {						\
+    extern bool f ## x ## c(double, double, double, double);	\
+    extern bool f ## x ## t(double, double, double, double);	\
+    if (f ## x ## c(a, b, c, d) != f ## x ## t(a, b, c, d)) {	\
+      printf(#x "(double) : %g %g %g %g\n", a, b, c, d);	\
+      nfail++;							\
+    }								\
+  } while(0)
+#endif
+
+#ifdef FLOAT
+#define TEST(x) do {						\
+    extern bool f ## x ## c(float, float, float, float);	\
+    extern bool f ## x ## t(float, float, float, float);	\
+    if (f ## x ## c(a, b, c, d) != f ## x ## t(a, b, c, d)) {	\
+      printf(#x "(float) : %g %g %g %g\n", a, b, c, d);		\
+      nfail++;							\
+    }								\
+  } while(0)
+#endif
+
+#ifdef DOUBLE2
+typedef double double2 __attribute__((ext_vector_type(2)));
+typedef long int2 __attribute__((ext_vector_type(2)));
+
+#define TEST(x) do {							\
+    extern int2 f ## x ## c(double2, double2, double2, double2);	\
+    extern int2 f ## x ## t(double2, double2, double2, double2);	\
+    double2 va = (double2) { randm11(), randm11() };			\
+    double2 vb = (double2) { randm11(), randm11() };			\
+    double2 vc = (double2) { randm11(), randm11() };			\
+    double2 vd = (double2) { randm11(), randm11() };			\
+    int index = rand() & 1;						\
+    va[index] = a; vb[index] = b; vc[index] = c; vd[index] = d;		\
+    if (f ## x ## c(va, vb, vc, vd)[index] != f ## x ## t(va, vb, vc, vd)[index]) { \
+	printf(#x "(double2) : %g %g %g %g\n", va[index], vb[index], vc[index], vd[index]); \
+	nfail++;							\
+      }									\
+  } while(0)
+#endif
+
+#ifdef FLOAT4
+typedef float float4 __attribute__((ext_vector_type(4)));
+typedef int int4 __attribute__((ext_vector_type(4)));
+
+#define TEST(x) do {							\
+    extern int4 f ## x ## c(float4, float4, float4, float4);		\
+    extern int4 f ## x ## t(float4, float4, float4, float4);		\
+    float4 va = (float4) { randm11(), randm11(), randm11(), randm11() }; \
+    float4 vb = (float4) { randm11(), randm11(), randm11(), randm11() }; \
+    float4 vc = (float4) { randm11(), randm11(), randm11(), randm11() }; \
+    float4 vd = (float4) { randm11(), randm11(), randm11(), randm11() }; \
+    int index = rand() & 3;						\
+    va[index] = a; vb[index] = b; vc[index] = c; vd[index] = d;		\
+    if (f ## x ## c(va, vb, vc, vd)[index] != f ## x ## t(va, vb, vc, vd)[index]) { \
+	printf(#x "(float4) : %g %g %g %g\n", va[index], vb[index], vc[index], vd[index]); \
+	nfail++;							\
+      }									\
+  } while(0)
+#endif
+
 int main(int argc, char **argv) {
-  for(int i=0;i<1000000;i++) {
+  int nfail = 0;
+  for(int i=0;i<500000;i++) {
     double a = randm11();
     double b = randm11();
     double c = randm11();
@@ -54,6 +102,7 @@ int main(int argc, char **argv) {
     TEST(90); TEST(91); TEST(92); TEST(93); TEST(94); TEST(95); TEST(96); TEST(97); TEST(98); TEST(99);
   }
 
-  printf("Passed\n");
+  if (nfail > 10) exit(-1);
+
   exit(0);
 }
