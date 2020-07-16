@@ -27,6 +27,7 @@ static double randm11() {
     if (f ## x ## c(a, b, c, d) != f ## x ## t(a, b, c, d)) {	\
       printf(#x "(double) : %g %g %g %g\n", a, b, c, d);	\
       nfail++;							\
+      if (nfail > 20) exit(-1);					\
     }								\
   } while(0)
 #endif
@@ -38,6 +39,7 @@ static double randm11() {
     if (f ## x ## c(a, b, c, d) != f ## x ## t(a, b, c, d)) {	\
       printf(#x "(float) : %g %g %g %g\n", a, b, c, d);		\
       nfail++;							\
+      if (nfail > 20) exit(-1);					\
     }								\
   } while(0)
 #endif
@@ -58,6 +60,7 @@ typedef long int2 __attribute__((ext_vector_type(2)));
     if (f ## x ## c(va, vb, vc, vd)[index] != f ## x ## t(va, vb, vc, vd)[index]) { \
 	printf(#x "(double2) : %g %g %g %g\n", va[index], vb[index], vc[index], vd[index]); \
 	nfail++;							\
+	if (nfail > 20) exit(-1);					\
       }									\
   } while(0)
 #endif
@@ -78,6 +81,7 @@ typedef int int4 __attribute__((ext_vector_type(4)));
     if (f ## x ## c(va, vb, vc, vd)[index] != f ## x ## t(va, vb, vc, vd)[index]) { \
 	printf(#x "(float4) : %g %g %g %g\n", va[index], vb[index], vc[index], vd[index]); \
 	nfail++;							\
+	if (nfail > 20) exit(-1);					\
       }									\
   } while(0)
 #endif
