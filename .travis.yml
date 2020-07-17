@@ -14,7 +14,7 @@ matrix:
           sources:
             - ubuntu-toolchain-r-test
           packages:
-            - clang-10 llvm-10 llvm-10-dev llvm-10-tools libstdc++-10-dev
+            - clang-10 llvm-10 llvm-10-dev llvm-10-tools libstdc++-10-dev ninja-build
       env:
         - CC=clang-10
         - CXX=clang++-10
