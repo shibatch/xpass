@@ -11,7 +11,7 @@
 
 #define NTEST 100
 #define DEPTHMAX 100
-#define NCHECK 20
+#define NCHECK 100
 
 #define NARGS 4
 #define NBINOP 4
@@ -29,6 +29,7 @@ string asqrtfunc = "asqrt";
 struct Args {
   vector<double> args = vector<double>(NARGS);
   Args() { for(int i=0;i<NARGS;i++) args[i] = randm11(); }
+  Args(double d) { for(int i=0;i<NARGS;i++) args[i] = d; }
 };
 
 struct Number {
@@ -87,6 +88,10 @@ struct BinOp : public Number {
 	if (fabs(fabs(left->eval(*a)/right->eval(*a)) - 1.0) < 1e-4) return false;
 	delete a;
       }
+      Args *a = new Args(0);
+      if (fabs(right->eval(*a)) < 1e-4) return false;
+      if (fabs(fabs(left->eval(*a)/right->eval(*a)) - 1.0) < 1e-4) return false;
+      delete a;
     }
     return left->check() && right->check();
   }
@@ -192,6 +197,9 @@ struct Compare : public Logic {
       if (fabs(left->eval(*a)-right->eval(*a)) < 1e-4) return false;
       delete a;
     }
+    Args *a = new Args(0);
+    if (fabs(left->eval(*a)-right->eval(*a)) < 1e-4) return false;
+    delete a;
     return left->check() && right->check();
   }
   string toString() {

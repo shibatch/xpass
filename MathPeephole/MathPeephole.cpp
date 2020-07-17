@@ -35,8 +35,8 @@ static const int verbose = 0;
 #define ENABLE_CMPZERO
 //#define DEBUG_CMPZERO
 
-#define ENABLE_MULDIV
-//#define DEBUG_MULDIV
+#define ENABLE_CLEANUP
+//#define DEBUG_CLEANUP
 
 //
 
@@ -70,6 +70,23 @@ bool checkInstOrder(BasicBlock &BB, Instruction *early, Instruction *late) {
   }
   abort();
 }
+
+void eraseTree(Value *v, unordered_set<Instruction *> &eraseList) {
+  if (!v) return;
+
+  Instruction *inst = dyn_cast<Instruction>(v);
+  if (!inst) return;
+  if (inst->getNumUses() != 0) return;
+
+  for(unsigned i=0;i<inst->getNumOperands();i++) {
+    Value *v2 = inst->getOperand(i);
+    inst->setOperand(i, UndefValue::get(inst->getType()));
+    eraseTree(v2, eraseList);
+  }
+
+  eraseList.insert(inst);
+}
+
 //
 
 struct AR_ReduceFraction {
@@ -94,12 +111,6 @@ struct ReduceFraction : public RewriteRule {
 
     BinaryOperator *fdivOp = dyn_cast<BinaryOperator>(seq[seq.size()-1]);
     if (!fdivOp || fdivOp->getOpcode() != Instruction::FDiv) return;
-
-    {
-      ConstantFP *c = dyn_cast<ConstantFP>(fdivOp->getOperand(1));
-      if (c && c->isZero()) return;
-    }
-
     if (!fdivOp->getFastMathFlags().isFast()) return;
 
     int beginning;
@@ -253,7 +264,7 @@ struct ReduceFraction : public RewriteRule {
     // Remove fdivOp0
     assert(fdivOp0->getNumUses() == 1);
     fdivOp0->replaceAllUsesWith(ConstantFP::get(fdivOp0->getType(), 0));
-    assert(fdivOp0->getNumUses() == 0);
+
     eraseList.insert(fdivOp0);
 
     nRewrite++;
@@ -464,10 +475,9 @@ struct ReduceFraction2 : public RewriteRule {
     fdivOp1->setOperand(1, btimesd);
 
     // Remove fdivOp0
-
     assert(fdivOp0->getNumUses() == 1);
     fdivOp0->replaceAllUsesWith(ConstantFP::get(fdivOp0->getType(), 0));
-    assert(fdivOp0->getNumUses() == 0);
+
     eraseList.insert(fdivOp0);
 
     nRewrite++;
@@ -603,6 +613,11 @@ struct SimplifyCmpDiv : public RewriteRule {
       dvalOnLeft = true;
     }
 
+    {
+      ConstantFP *c = dyn_cast<ConstantFP>(dval);
+      if (c && c->isZero()) dval = NULL;
+    }
+
     Value *aval = fdivOp->getOperand(0);
     fdivOp->setOperand(0, UndefValue::get(fdivOp->getType()));
 
@@ -649,7 +664,8 @@ struct SimplifyCmpDiv : public RewriteRule {
     errs() << "SimplifyCmpDiv : bval = " << *bval << "\n";
     if (cval == NULL) errs() << "SimplifyCmpDiv : cval = NULL\n";
     else errs() << "SimplifyCmpDiv : cval = " << *cval << "\n";
-    errs() << "SimplifyCmpDiv : dval = " << *dval << "\n";
+    if (dval == NULL) errs() << "SimplifyCmpDiv : dval = NULL\n";
+    else errs() << "SimplifyCmpDiv : dval = " << *dval << "\n";
     errs() << "SimplifyCmpDiv : negativeB = " << negativeB << "\n";
     errs() << "SimplifyCmpDiv : negativeC = " << negativeC << "\n";
     errs() << "SimplifyCmpDiv : dvalOnLeft = " << dvalOnLeft << "\n";
@@ -677,13 +693,11 @@ struct SimplifyCmpDiv : public RewriteRule {
       ElementCount ec = vt->getElementCount();
       if (et->isFloatTy()) {
 	intType = VectorType::get(Type::getInt32Ty(BB.getContext()), ec);
-	maskVal = ConstantVector::getSplat(ec.Min, 
-          ConstantInt::get(Type::getInt32Ty(BB.getContext()), 1UL << 31));
+	maskVal = ConstantInt::get(intType, 1UL << 31);
       } else {
 	assert(et->isDoubleTy());
 	intType = VectorType::get(Type::getInt64Ty(BB.getContext()), ec);
-	maskVal = ConstantVector::getSplat(ec.Min,
-          ConstantInt::get(Type::getInt64Ty(BB.getContext()), 1UL << 63));
+	maskVal = ConstantInt::get(intType, 1UL << 63);
       }
     }
 
@@ -692,21 +706,36 @@ struct SimplifyCmpDiv : public RewriteRule {
     if (negativeB ^ dvalOnLeft) signBit = builder.CreateXor(signBit, maskVal);
 
     Value *dminusc = dval;
-    if (cval != NULL && !negativeC) {
-      dminusc = builder.CreateFSub(dval, cval);
+    if (dval == cval && !negativeC) {
+      dminusc = NULL;
+    } else if (cval != NULL && !negativeC) {
+      if (dval) {
+	dminusc = builder.CreateFSub(dval, cval);
+      } else {
+	dminusc = builder.CreateFNeg(cval);
+      }
     } else if (cval != NULL && negativeC) {
-      dminusc = builder.CreateFAdd(dval, cval);
+      if (dval) {
+	dminusc = builder.CreateFAdd(dval, cval);
+      } else {
+	dminusc = cval;
+      }
     }
-    if (negativeB) dminusc = builder.CreateFNeg(dminusc);
-    Value *fmulInst = builder.CreateFMul(bval, dminusc);
+    if (negativeB && dminusc) dminusc = builder.CreateFNeg(dminusc);
+    Value *fmulInst = dminusc ? builder.CreateFMul(bval, dminusc) : NULL;
 
     Value *left = builder.CreateBitCast(aval, intType);
     left = builder.CreateXor(left, signBit);
     left = builder.CreateBitCast(left, fpType);
 
-    Value *right = builder.CreateBitCast(fmulInst, intType);
-    right = builder.CreateXor(right, signBit);
-    right = builder.CreateBitCast(right, fpType);
+    Value *right = NULL;
+    if (fmulInst) {
+      right = builder.CreateBitCast(fmulInst, intType);
+      right = builder.CreateXor(right, signBit);
+      right = builder.CreateBitCast(right, fpType);
+    } else {
+      right = ConstantFP::get(fpType, 0);
+    }
 
     Value *cmpInst2 = builder.CreateFCmp(cmpInst->getPredicate(), left, right);
 
@@ -716,6 +745,9 @@ struct SimplifyCmpDiv : public RewriteRule {
     cmpInst->setOperand(0, UndefValue::get(cmpInst->getType()));
     cmpInst->setOperand(1, UndefValue::get(cmpInst->getType()));
     eraseList.insert(cmpInst);
+
+    eraseTree(cval, eraseList);
+    eraseTree(dval, eraseList);
 
     assert(fdivOp->getNumUses() == 0);
     eraseList.insert(fdivOp);
@@ -744,7 +776,7 @@ struct SimplifyCmpSqrt : public RewriteRule {
   void clear() { arlist.clear(); }
 
   void match(vector<Value *> &seq) {
-    // Matches FCmp FAdd* FMul* SQRT
+    // Matches FCmp FAdd* FDiv? FMul* SQRT
     if (seq.size() < 2) return;
     if (arlist.size() >= 1) return; // Only matches once for this rule
 
@@ -776,6 +808,13 @@ struct SimplifyCmpSqrt : public RewriteRule {
     for(i=beginning+1;i<seq.size()-1;i++) {
       BinaryOperator *op = dyn_cast<BinaryOperator>(seq[i]);
       if (!op) return;
+      if (op->getOpcode() == Instruction::FDiv &&
+	  op->getOperand(0) == seq[i+1]) {
+	i++;
+	ar.mtop = op;
+	break;
+      }
+
       if (op->getOpcode() == Instruction::FMul) {
 	ar.mtop = op;
 	break;
@@ -849,6 +888,7 @@ struct SimplifyCmpSqrt : public RewriteRule {
     }
 
     Value *wval = ar.mtop, *xval = callInst->getArgOperand(0);
+    bool wtimeswis1 = false;
     callInst->setArgOperand(0, UndefValue::get(xval->getType()));
 
     if (ar.mtop) {
@@ -859,6 +899,7 @@ struct SimplifyCmpSqrt : public RewriteRule {
       callInst->replaceAllUsesWith(ConstantFP::get(callInst->getType(), 0));
       if (negative) wval = ConstantFP::get(callInst->getType(), -1);
       else wval = ConstantFP::get(callInst->getType(), 1);
+      wtimeswis1 = true;
     }
 
 #ifdef DEBUG_CMPSQRT
@@ -885,8 +926,8 @@ struct SimplifyCmpSqrt : public RewriteRule {
     } else {
       cmpInstW0 = builder.CreateFCmpOGE(wval, ConstantFP::get(wval->getType(), 0));
     }
-    Value *wtimesw = builder.CreateFMul(wval, wval);
-    Value *wwx = builder.CreateFMul(wtimesw, xval);
+    Value *wtimesw = wtimeswis1 ? NULL : builder.CreateFMul(wval, wval);
+    Value *wwx = wtimeswis1 ? xval : builder.CreateFMul(wtimesw, xval);
     Value *zminusy = builder.CreateFSub(zval, yval);
     Value *zminusysqu = builder.CreateFMul(zminusy, zminusy);
     Value *cmpInst2 = builder.CreateFCmpOGT(wwx, zminusysqu);
@@ -911,20 +952,37 @@ struct SimplifyCmpSqrt : public RewriteRule {
 
 //
 
-struct AR_SimplifyMulDiv {
+struct AR_CleanupMulDiv {
   vector<Value *> seq = vector<Value *>();
 };
 
-struct SimplifyMulDiv : public RewriteRule {
+struct AR_CleanupMulOne {
+  BinaryOperator *op = NULL;
+  bool ope0IsOne = false;
+};
+
+struct AR_CleanupAddZero {
+  BinaryOperator *op = NULL;
+  bool ope0IsZero = false;
+  bool isFSub = false;
+};
+
+struct Cleanup : public RewriteRule {
   // (a / b) * c -> (a * c) / b
 
-  vector<AR_SimplifyMulDiv> arlist = vector<AR_SimplifyMulDiv>();
-  string name() { return "SimplifyMulDiv"; }
-  void clear() { arlist.clear(); }
+  vector<AR_CleanupMulDiv>  arlistMulDiv  = vector<AR_CleanupMulDiv>();
+  vector<AR_CleanupMulOne>  arlistMulOne  = vector<AR_CleanupMulOne>();
+  vector<AR_CleanupAddZero> arlistAddZero = vector<AR_CleanupAddZero>();
+  string name() { return "Cleanup"; }
+  void clear() {
+    arlistMulDiv.clear();
+    arlistMulOne.clear();
+    arlistAddZero.clear();
+  }
 
-  void match(vector<Value *> &seq) {
+  void matchMulDiv(vector<Value *> &seq) {
     // Matches FMul+ FDiv
-    if (arlist.size() >= 1) return; // Only matches once for this rule
+    if (arlistMulDiv.size() >= 1) return;
     if (seq.size() < 2) return;
 
     BinaryOperator *fdivOp =
@@ -951,22 +1009,87 @@ struct SimplifyMulDiv : public RewriteRule {
 
     //
 
-    AR_SimplifyMulDiv ar;
+    AR_CleanupMulDiv ar;
     for(int i=beginning;i<seq.size();i++) ar.seq.push_back(seq[i]);
 
-#ifdef DEBUG_MULDIV
-    errs() << "SimplifyMulDiv match\n";
+#ifdef DEBUG_CLEANUP
+    errs() << "Cleanup match\n";
     for(int i=beginning;i<seq.size();i++) errs() << *(seq[i]) << "\n";
     errs() << "\n";
 #endif
 
-    arlist.push_back(ar);
+    arlistMulDiv.push_back(ar);
   }
 
-  bool execute(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
-    if (arlist.size() == 0) return false;
+  void matchMulOne(vector<Value *> &seq) {
+    BinaryOperator *op =
+      dyn_cast<BinaryOperator>(seq[seq.size()-1]);
 
-    AR_SimplifyMulDiv ar = arlist[0];
+    if (!op) return;
+
+    if (op->getOpcode() == Instruction::FMul) {
+      ConstantFP *c = dyn_cast<ConstantFP>(op->getOperand(0));
+      if (c && c->isExactlyValue(1.0)) {
+	AR_CleanupMulOne ar;
+	ar.op = op;
+	ar.ope0IsOne = true;
+	arlistMulOne.push_back(ar);
+	return;
+      }
+    }
+
+    if (op->getOpcode() == Instruction::FMul ||
+	op->getOpcode() == Instruction::FDiv) {
+      ConstantFP *c = dyn_cast<ConstantFP>(op->getOperand(1));
+      if (c && c->isExactlyValue(1.0)) {
+	AR_CleanupMulOne ar;
+	ar.op = op;
+	ar.ope0IsOne = false;
+	arlistMulOne.push_back(ar);
+	return;
+      }
+    }
+  }
+
+  void matchAddZero(vector<Value *> &seq) {
+    BinaryOperator *addOp =
+      dyn_cast<BinaryOperator>(seq[seq.size()-1]);
+
+    if (!(addOp && (addOp->getOpcode() == Instruction::FAdd ||
+		    addOp->getOpcode() == Instruction::FSub))) return;
+
+    ConstantFP *c;
+    c = dyn_cast<ConstantFP>(addOp->getOperand(0));
+    if (c && c->isZero()) {
+      AR_CleanupAddZero ar;
+      ar.op = addOp;
+      ar.ope0IsZero = true;
+      ar.isFSub = addOp->getOpcode() == Instruction::FSub;
+      arlistAddZero.push_back(ar);
+      return;
+    }
+
+    c = dyn_cast<ConstantFP>(addOp->getOperand(1));
+    if (c && c->isZero()) {
+      AR_CleanupAddZero ar;
+      ar.op = addOp;
+      ar.ope0IsZero = false;
+      ar.isFSub = addOp->getOpcode() == Instruction::FSub;
+      arlistAddZero.push_back(ar);
+      return;
+    }
+  }
+
+  void match(vector<Value *> &seq) {
+    matchMulDiv(seq);
+    matchMulOne(seq);
+    matchAddZero(seq);
+  }
+
+  bool executeMulDiv(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
+    if (arlistMulDiv.size() == 0) return false;
+
+    AR_CleanupMulDiv ar = arlistMulDiv[0];
 
     BinaryOperator *fdivOp = dyn_cast<BinaryOperator>(ar.seq[ar.seq.size()-1]);
     BinaryOperator *mtop = dyn_cast<BinaryOperator>(ar.seq[0]);
@@ -976,9 +1099,19 @@ struct SimplifyMulDiv : public RewriteRule {
 
     if (mbot->getOperand(0) == fdivOp) {
       mbot->setOperand(0, ConstantFP::get(mbot->getType(), 1));
+
+      AR_CleanupMulOne arm1;
+      arm1.op = mbot;
+      arm1.ope0IsOne = true;
+      arlistMulOne.push_back(arm1);
     } else {
       assert(mbot->getOperand(1) == fdivOp);
       mbot->setOperand(1, ConstantFP::get(mbot->getType(), 1));
+
+      AR_CleanupMulOne arm1;
+      arm1.op = mbot;
+      arm1.ope0IsOne = false;
+      arlistMulOne.push_back(arm1);
     }
 
     fdivOp->moveAfter(mtop);
@@ -991,6 +1124,49 @@ struct SimplifyMulDiv : public RewriteRule {
     nRewrite++;
 
     return true;
+  }
+
+  bool executeMulOne(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
+    bool changed = false;
+
+    for(AR_CleanupMulOne &ar : arlistMulOne) {
+      BinaryOperator *op = ar.op;
+      op->replaceAllUsesWith(op->getOperand(ar.ope0IsOne ? 1 : 0));
+      op->setOperand(ar.ope0IsOne ? 1 : 0, UndefValue::get(op->getType()));
+      eraseList.insert(op);
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  bool executeAddZero(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
+    bool changed = false;
+
+    for(AR_CleanupAddZero &ar : arlistAddZero) {
+      BinaryOperator *op = ar.op;
+      if (!(ar.isFSub && ar.ope0IsZero)) {
+	op->replaceAllUsesWith(op->getOperand(ar.ope0IsZero ? 1 : 0));
+	op->setOperand(ar.ope0IsZero ? 1 : 0, UndefValue::get(op->getType()));
+	eraseList.insert(op);
+      } else {
+	IRBuilder<> builder(op);
+	op->replaceAllUsesWith(builder.CreateFNeg(op->getOperand(1)));
+	op->setOperand(1, UndefValue::get(op->getType()));
+	eraseList.insert(op);
+      }
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  bool execute(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
+    bool changed = false;
+    changed = changed || executeMulDiv(BB, eraseList);
+    changed = changed || executeMulOne(BB, eraseList);
+    changed = changed || executeAddZero(BB, eraseList);
+    return changed;
   }
 };
 
@@ -1085,45 +1261,35 @@ struct SimplifyCmpZero : public RewriteRule {
 
 //
 
-static bool initialized = false;
-static vector<shared_ptr<RewriteRule>> rules;
-
 struct MathPeephole : public FunctionPass {
   static char ID;
+  vector<shared_ptr<RewriteRule>> rules;
 
-  //
-  
   MathPeephole() : FunctionPass(ID) {
-    if (!initialized) {
-      initialized = true;
-
-#ifdef ENABLE_MULDIV
-      rules.push_back(shared_ptr<RewriteRule>(new SimplifyMulDiv()));
+#ifdef ENABLE_CLEANUP
+    rules.push_back(shared_ptr<RewriteRule>(new Cleanup()));
 #endif
 
 #ifdef ENABLE_CMPZERO
-      rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpZero()));
+    rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpZero()));
 #endif
 
 #ifdef ENABLE_REDUCEFRAC2
-      rules.push_back(shared_ptr<RewriteRule>(new ReduceFraction2()));
+    rules.push_back(shared_ptr<RewriteRule>(new ReduceFraction2()));
 #endif
 
 #ifdef ENABLE_REDUCEFRAC
-      rules.push_back(shared_ptr<RewriteRule>(new ReduceFraction()));
+    rules.push_back(shared_ptr<RewriteRule>(new ReduceFraction()));
 #endif
 
 #ifdef ENABLE_CMPDIV
-      rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpDiv()));
+    rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpDiv()));
 #endif
 
 #ifdef ENABLE_CMPSQRT
-      rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpSqrt()));
+    rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpSqrt()));
 #endif
-    }
   }
-
-  ~MathPeephole() { rules.clear(); initialized = false; }
 
   void traverse(BasicBlock &BB, vector<Value *> &seq, unordered_set<Instruction *> &eraseList, unordered_set<Value *> &visited) {
     Value *val = seq[seq.size()-1];
@@ -1166,21 +1332,6 @@ struct MathPeephole : public FunctionPass {
     for(shared_ptr<RewriteRule> rule : rules) rule->clearStats();
 
     for (auto &BB : F) {
-#ifndef NDEBUG
-      bool divByZero = false;
-      for (Instruction &instr : BB) {
-	BinaryOperator *fdivOp = dyn_cast<BinaryOperator>(&instr);
-	if (fdivOp && fdivOp->getOpcode() == Instruction::FDiv) {
-	  ConstantFP *c = dyn_cast<ConstantFP>(fdivOp->getOperand(1));
-	  if (c && c->isZero()) {
-	    divByZero = true;
-	    break;
-	  }
-	}
-      }
-      if (divByZero) continue;
-#endif
-
       if (verbose >= 3) {
 	for (Instruction &instr : BB) {
 	  if (eraseList.count(&instr) == 0) errs() << "Before : " << instr << "\n";
@@ -1246,6 +1397,7 @@ struct MathPeephole : public FunctionPass {
 
     for(Instruction *inst : eraseList) {
       if (verbose >= 3) errs() << "Erasing " << *inst << " with " << inst->getNumUses() << " uses\n";
+      assert(inst->getNumUses() == 0);
       inst->replaceAllUsesWith(UndefValue::get(inst->getType()));
       inst->eraseFromParent();
     }
