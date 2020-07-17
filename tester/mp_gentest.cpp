@@ -33,7 +33,7 @@ struct Args {
 };
 
 struct Number {
-  Number *generate(int depth);
+  shared_ptr<Number>generate(int depth);
   virtual double eval(Args &a) { return 0; }
   virtual bool check() { return true; }
   virtual string toString() { return ""; }
@@ -41,7 +41,7 @@ struct Number {
 };
 
 struct Logic {
-  Logic *generate(int depth, Number *num);
+  shared_ptr<Logic> generate(int depth, shared_ptr<Number> num);
   virtual bool check() { return true; }
   virtual bool eval(Args &a) { return false; }
   virtual string toString() { return ""; }
@@ -67,10 +67,12 @@ struct Const : public Number {
 };
 
 struct BinOp : public Number {
-  Number *left, *right;
+  shared_ptr<Number> left, right;
   int opcode;
 
-  BinOp(int op, Number *l, Number *r) { opcode = op; left = l; right = r; }
+  BinOp(int op, shared_ptr<Number> l, shared_ptr<Number> r) {
+    opcode = op; left = l; right = r;
+  }
   double eval(Args &a) {
     switch(opcode) {
     case 0: return left->eval(a) + right->eval(a);
@@ -82,16 +84,15 @@ struct BinOp : public Number {
   }
   bool check() {
     if (opcode == 3) {
+      shared_ptr<Args> a;
       for(int i=0;i<NCHECK;i++) {
-	Args *a = new Args();
+	a = shared_ptr<Args>(new Args());
 	if (fabs(right->eval(*a)) < 1e-4) return false;
 	if (fabs(fabs(left->eval(*a)/right->eval(*a)) - 1.0) < 1e-4) return false;
-	delete a;
       }
-      Args *a = new Args(0);
+      a = shared_ptr<Args>(new Args(0));
       if (fabs(right->eval(*a)) < 1e-4) return false;
       if (fabs(fabs(left->eval(*a)/right->eval(*a)) - 1.0) < 1e-4) return false;
-      delete a;
     }
     return left->check() && right->check();
   }
@@ -108,10 +109,10 @@ struct BinOp : public Number {
 };
 
 struct UOp : public Number {
-  Number *op;
+  shared_ptr<Number> op;
   int opcode;
 
-  UOp(int opc, Number *n) { opcode = opc; op = n; }
+  UOp(int opc, shared_ptr<Number> n) { opcode = opc; op = n; }
   double eval(Args &a) {
     switch(opcode) {
     case (NBINOP + 0): return -op->eval(a);
@@ -130,15 +131,15 @@ struct UOp : public Number {
   int countNode() { return op->countNode() + 1; }
 };
 
-Number* Number::generate(int depth) {
-  if (depth >= DEPTHMAX) return new Const(randm11());
+shared_ptr<Number> Number::generate(int depth) {
+  if (depth >= DEPTHMAX) return shared_ptr<Number>(new Const(randm11()));
   depth++;
   int n = (int)(rand01() * (1 + NARGS + NBINOP + NUOP));
 
-  if (n == 0) return new Const(randm11());
-  if (n < 1 + NARGS) return new Arg(n-1);
-  if (n < 1 + NARGS + NBINOP) return new BinOp(n - NARGS - 1, generate(depth), generate(depth));
-  if (n < 1 + NARGS + NBINOP + NUOP) return new UOp(n - NARGS - 1, generate(depth));
+  if (n == 0) return shared_ptr<Number>(new Const(randm11()));
+  if (n < 1 + NARGS) return shared_ptr<Number>(new Arg(n-1));
+  if (n < 1 + NARGS + NBINOP) return shared_ptr<Number>(new BinOp(n - NARGS - 1, generate(depth), generate(depth)));
+  if (n < 1 + NARGS + NBINOP + NUOP) return shared_ptr<Number>(new UOp(n - NARGS - 1, generate(depth)));
 
   abort();
 }
@@ -153,10 +154,10 @@ struct LConst : public Logic {
 };
 
 struct LBinOp : public Logic {
-  Logic *left, *right;
+  shared_ptr<Logic> left, right;
   int opcode;
 
-  LBinOp(int op, Logic *l, Logic *r) { opcode = op; left = l; right = r; }
+  LBinOp(int op, shared_ptr<Logic> l, shared_ptr<Logic> r) { opcode = op; left = l; right = r; }
   bool eval(Args &a) {
     switch(opcode) {
     case (NARGS + NBINOP + NUOP + 0): return left->eval(a) || right->eval(a);
@@ -176,10 +177,10 @@ struct LBinOp : public Logic {
 };
 
 struct Compare : public Logic {
-  Number *left, *right;
+  shared_ptr<Number> left, right;
   int opcode;
 
-  Compare(int op, Number *l, Number *r) { opcode = op; left = l; right = r; }
+  Compare(int op, shared_ptr<Number> l, shared_ptr<Number> r) { opcode = op; left = l; right = r; }
   bool eval(Args &a) {
     switch(opcode) {
     case (NARGS + NBINOP + NUOP + NLBINOP + 0): return left->eval(a) <  right->eval(a);
@@ -192,14 +193,13 @@ struct Compare : public Logic {
     }
   }
   bool check() {
+    shared_ptr<Args> a;
     for(int i=0;i<NCHECK;i++) {
-      Args *a = new Args();
+      a = shared_ptr<Args>(new Args());
       if (fabs(left->eval(*a)-right->eval(*a)) < 1e-4) return false;
-      delete a;
     }
-    Args *a = new Args(0);
+    a = shared_ptr<Args>(new Args(0));
     if (fabs(left->eval(*a)-right->eval(*a)) < 1e-4) return false;
-    delete a;
     return left->check() && right->check();
   }
   string toString() {
@@ -216,18 +216,18 @@ struct Compare : public Logic {
   int countNode() { return left->countNode() + right->countNode() + 1; }
 };
 
-Logic* Logic::generate(int depth, Number *num) {
-  if (depth >= DEPTHMAX) return new LConst(rand() & 1 ? true : false);
+shared_ptr<Logic> Logic::generate(int depth, shared_ptr<Number> num) {
+  if (depth >= DEPTHMAX) return shared_ptr<Logic>(new LConst(rand() & 1 ? true : false));
   depth++;
   int n = (int)(rand01() * (1 + NLBINOP + NCMPOP));
 
-  if (n == 0) return new LConst(rand() & 1 ? true : false);
-  if (n < 1 + NLBINOP) return new LBinOp(n - 1 + NARGS + NBINOP + NUOP, generate(depth, num), generate(depth, num));
+  if (n == 0) return shared_ptr<Logic>(new LConst(rand() & 1 ? true : false));
+  if (n < 1 + NLBINOP) return shared_ptr<Logic>(new LBinOp(n - 1 + NARGS + NBINOP + NUOP, generate(depth, num), generate(depth, num)));
   if (n < 1 + NLBINOP + NCMPOP) {
-    Number *left, *right;
-    left  = rand01() > 0.1 ? num->generate(depth) : new Const(0);
-    right = rand01() > 0.1 ? num->generate(depth) : new Const(0);
-    return new Compare(n - 1 + NARGS + NBINOP + NUOP, left, right);
+    shared_ptr<Number> left, right;
+    left  = rand01() > 0.1 ? num->generate(depth) : shared_ptr<Number>(new Const(0));
+    right = rand01() > 0.1 ? num->generate(depth) : shared_ptr<Number>(new Const(0));
+    return shared_ptr<Logic>(new Compare(n - 1 + NARGS + NBINOP + NUOP, left, right));
   }
 
   abort();
@@ -246,8 +246,8 @@ int main(int argc, char **argv) {
   if (argc > 2) booltype = argv[2];
   if (argc > 3) asqrtfunc = argv[3];
 
-  Number *x = new Number();
-  Logic *y = new Logic();
+  shared_ptr<Number> x = shared_ptr<Number>(new Number());
+  shared_ptr<Logic> y = shared_ptr<Logic>(new Logic());
 
   //
 
@@ -285,7 +285,7 @@ int main(int argc, char **argv) {
       " a1, " << fptype << " a2, " << fptype << " a3) {\n";
     cout << "  return ";
 
-    Logic *l;
+    shared_ptr<Logic> l;
     for(;;) {
       l = y->generate(0, x);
       if (!l->check()) continue;
