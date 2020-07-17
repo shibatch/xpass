@@ -20,7 +20,10 @@ add_custom_command(OUTPUT ${MP_GENERATED_FLOAT4_C}
   COMMAND $<TARGET_FILE:mp_gentest> float4 int4 asqrtf4 > ${MP_GENERATED_FLOAT4_C}
 )
 
-add_custom_target(MathPeephole_generated DEPENDS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:${TARGET_MATHPEEPHOLE}>)
+add_custom_target(MathPeephole_generated
+  DEPENDS ${TARGET_MATHPEEPHOLE}
+  COMMAND echo a > MathPeephole_generated
+  )
 
 foreach(TYPE DOUBLE FLOAT DOUBLE2 FLOAT4)
   string(TOLOWER ${TYPE} lctype)
