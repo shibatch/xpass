@@ -59,6 +59,9 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
 
 ##
 
+set(TARGET_SUBSTSLEEF "SubstSleef")
+set(TARGET_MATHPEEPHOLE "MathPeephole")
+
 add_subdirectory(SubstSleef)
 add_subdirectory(MathPeephole)
 add_subdirectory(tester)

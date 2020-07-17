@@ -1,1 +1,1 @@
-add_library(MathPeephole SHARED MathPeephole.cpp)
+add_library(${TARGET_MATHPEEPHOLE} SHARED MathPeephole.cpp)
