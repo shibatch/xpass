@@ -149,6 +149,21 @@ Value *mulSign(Value *fpval, Value *intSign, IRBuilder<> &builder) {
   return builder.CreateBitCast(v, fpval->getType());
 }
 
+bool isNonNegative(Value *v) {
+  CallInst *callInst = dyn_cast<CallInst>(v);
+  if (callInst) {
+    Function *calledFunc = callInst->getCalledFunction();
+    if (calledFunc && calledFunc->getIntrinsicID() == Intrinsic::sqrt) return true;
+  }
+
+  BinaryOperator *binOp = dyn_cast<BinaryOperator>(v);
+  if (binOp && binOp->getOpcode() == Instruction::FMul) {
+    if (binOp->getOperand(0) == binOp->getOperand(1)) return true;
+  }
+
+  return false;
+}
+
 //
 
 struct AR_ReduceFraction {
@@ -675,7 +690,7 @@ struct SimplifyCmpDiv : public RewriteRule {
     Value *aval = fdivOp->getOperand(0);
     fdivOp->setOperand(0, UndefValue::get(fdivOp->getType()));
 
-    bool negativeB = false, negativeC = false;
+    bool negativeB = false, negativeC = false; // B and C are multiplied by negative constants
     Value *cval = NULL;
     if (ar.abot) {
       for(unsigned i=1;i<q.size()-1;i++) {
@@ -733,9 +748,18 @@ struct SimplifyCmpDiv : public RewriteRule {
     Type *intType = getCorrespondingIntType(fpType, BB);
     Value *signMask = ConstantInt::get(intType, 1UL << (getElementBitWidth(intType) - 1));
 
-    Value *bitCast1 = builder.CreateBitCast(bval, intType);
-    Value *signBit = builder.CreateAnd(bitCast1, signMask);
-    if (negativeB ^ dvalOnLeft) signBit = builder.CreateXor(signBit, signMask);
+    bool bvalIsPositive = isNonNegative(bval); // bval itself is non-negative
+#ifdef DEBUG_CMPDIV
+    errs() << "SimplifyCmpDiv : bvalIsPositive = " << bvalIsPositive << "\n";
+#endif
+
+    Value *signBit = NULL;
+
+    if (!bvalIsPositive || (negativeB ^ dvalOnLeft)) {
+      Value *bitCast1 = builder.CreateBitCast(bval, intType);
+      signBit = builder.CreateAnd(bitCast1, signMask);
+      if (negativeB ^ dvalOnLeft) signBit = builder.CreateXor(signBit, signMask);
+    }
 
     Value *dminusc = dval;
     if (dval == cval && !negativeC) {
@@ -756,15 +780,21 @@ struct SimplifyCmpDiv : public RewriteRule {
     if (negativeB && dminusc) dminusc = builder.CreateFNeg(dminusc);
     Value *fmulInst = dminusc ? builder.CreateFMul(bval, dminusc) : NULL;
 
-    Value *left = builder.CreateBitCast(aval, intType);
-    left = builder.CreateXor(left, signBit);
-    left = builder.CreateBitCast(left, fpType);
+    Value *left = aval;
+    if (signBit) {
+      left = builder.CreateBitCast(aval, intType);
+      left = builder.CreateXor(left, signBit);
+      left = builder.CreateBitCast(left, fpType);
+    }
 
     Value *right = NULL;
     if (fmulInst) {
-      right = builder.CreateBitCast(fmulInst, intType);
-      right = builder.CreateXor(right, signBit);
-      right = builder.CreateBitCast(right, fpType);
+      right = fmulInst;
+      if (signBit) {
+	right = builder.CreateBitCast(fmulInst, intType);
+	right = builder.CreateXor(right, signBit);
+	right = builder.CreateBitCast(right, fpType);
+      }
     } else {
       right = ConstantFP::get(fpType, 0);
     }
