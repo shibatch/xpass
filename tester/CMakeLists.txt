@@ -42,5 +42,13 @@ foreach(TYPE DOUBLE FLOAT DOUBLE2 FLOAT4)
   target_compile_definitions(mp_tester_${lctype} PRIVATE ${TYPE}=1)
   target_link_libraries(mp_tester_${lctype} PUBLIC m)
 
-  add_test(NAME "MathPeephole_${TYPE}" COMMAND mp_tester_${lctype})
+  add_test(NAME "MathPeephole1_${TYPE}" COMMAND mp_tester_${lctype})
 endforeach()
+
+add_executable(mp_check mp_check.c)
+add_dependencies(mp_check MathPeephole_generated)
+target_compile_options(mp_check PRIVATE
+  "-DTEST" "-O3" "-ffast-math"
+  "SHELL:-Xclang -load -Xclang ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:${TARGET_MATHPEEPHOLE}>")
+
+add_test(NAME "MathPeephole2" COMMAND mp_check)
