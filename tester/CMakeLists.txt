@@ -32,7 +32,7 @@ foreach(TYPE DOUBLE FLOAT DOUBLE2 FLOAT4)
   add_dependencies(obj_mp_generated_${lctype}_w_pass MathPeephole_generated)
   target_compile_definitions(obj_mp_generated_${lctype}_w_pass PRIVATE TEST=1)
   target_compile_options(obj_mp_generated_${lctype}_w_pass PRIVATE
-    "-DTEST" "-O3" "-ffast-math"
+    "-DTEST" "-O1" "-ffast-math"
     "SHELL:-Xclang -load -Xclang ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:${TARGET_MATHPEEPHOLE}>")
 
   add_library(obj_mp_generated_${lctype}_wo_pass OBJECT ${MP_GENERATED_${TYPE}_C})
@@ -48,7 +48,7 @@ endforeach()
 add_executable(mp_check mp_check.c)
 add_dependencies(mp_check MathPeephole_generated)
 target_compile_options(mp_check PRIVATE
-  "-DTEST" "-O3" "-ffast-math"
+  "-DTEST" "-O1" "-ffast-math"
   "SHELL:-Xclang -load -Xclang ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:${TARGET_MATHPEEPHOLE}>")
 
 add_test(NAME "MathPeephole2" COMMAND mp_check)

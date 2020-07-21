@@ -141,7 +141,8 @@ shared_ptr<Number> Number::generate(int depth) {
   if (n < 1 + NARGS + NBINOP) return shared_ptr<Number>(new BinOp(n - NARGS - 1, generate(depth), generate(depth)));
   if (n < 1 + NARGS + NBINOP + NUOP) return shared_ptr<Number>(new UOp(n - NARGS - 1, generate(depth)));
 
-  abort();
+  return shared_ptr<Number>(new Const(randm11()));
+  //abort();
 }
 
 struct LConst : public Logic {
@@ -230,7 +231,8 @@ shared_ptr<Logic> Logic::generate(int depth, shared_ptr<Number> num) {
     return shared_ptr<Logic>(new Compare(n - 1 + NARGS + NBINOP + NUOP, left, right));
   }
 
-  abort();
+  return shared_ptr<Logic>(new LConst(rand() & 1 ? true : false));
+  //abort();
 }
 
 int main(int argc, char **argv) {
