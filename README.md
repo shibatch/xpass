@@ -51,7 +51,7 @@ This pass performs the following transforms.
 * a/b + c/d  ->  (ad + bc) / (bd)
 * x/y + z > a/b + c  ->  (xb - ay) / (yb) + z > c
 * a/b + c > d  ->  b < 0 ? (a - b * (d - c) < 0) : (-(a - b * (d - c)) < 0)
-* w sqrt(x) + y > z  ->  w >= 0 ? ((z < y) | (w*w*x > (z-y)*(z-y))) : ((z <= y) & (w*w*x < (z-y)*(z-y)))
+* w sqrt(x) + y > z  ->  w >= 0 ? ((z < y) | (wwx > (z-y)(z-y))) : ((z <= y) & (wwx < (z-y)(z-y)))
 
 
 Please see [wiki](https://github.com/shibatch/xpass/wiki) for examples of the transforms.

@@ -68,6 +68,9 @@ bool checkInstOrder(BasicBlock &BB, Instruction *early, Instruction *late) {
     if (&inst == early) return true;
     if (&inst == late) return false;
   }
+#ifndef NDEBUG
+  errs() << "Abort : checkInstOrder\n";
+#endif
   abort();
 }
 
@@ -936,7 +939,6 @@ struct SimplifyCmpSqrt : public RewriteRule {
     }
 
     Value *yval = ar.atop;
-    //if (!yval) yval = ConstantFP::get(callInst->getType(), 0);
 
     Value *zval;
     bool zvalOnLeft;
@@ -950,22 +952,61 @@ struct SimplifyCmpSqrt : public RewriteRule {
       zvalOnLeft = true;
     }
 
-    Value *wval = ar.mtop, *xval = callInst->getArgOperand(0);
-    bool wis1 = false, wism1 = false;
+    Value *wval = NULL, *xval = callInst->getArgOperand(0);
+    bool wis1 = false, wism1 = false, wisposconst = false, wisnegconst = false;
     callInst->setArgOperand(0, UndefValue::get(xval->getType()));
 
     if (ar.mtop) {
       ar.mtop->replaceAllUsesWith(ConstantFP::get(callInst->getType(), 0));
-      callInst->replaceAllUsesWith(ConstantFP::get(callInst->getType(), 1));
-      if (negative) wval = builder.CreateFNeg(wval);
+
+      Value *mtop = ar.mtop;
+      if (ar.mtop->getOperand(0) == callInst) {
+	mtop = ar.mtop->getOperand(1);
+	ar.mtop->setOperand(0, UndefValue::get(ar.mtop->getType()));
+	ar.mtop->setOperand(1, UndefValue::get(ar.mtop->getType()));
+	eraseList.insert(ar.mtop);
+	assert(callInst->getNumUses() == 0);
+      } else if (ar.mtop->getOperand(1) == callInst) {
+	mtop = ar.mtop->getOperand(0);
+	ar.mtop->setOperand(0, UndefValue::get(ar.mtop->getType()));
+	ar.mtop->setOperand(1, UndefValue::get(ar.mtop->getType()));
+	eraseList.insert(ar.mtop);
+	assert(callInst->getNumUses() == 0);
+      } else {
+	callInst->replaceAllUsesWith(ConstantFP::get(callInst->getType(), 1));
+      }
+      wval = mtop;
+
+      ConstantFP *c = dyn_cast<ConstantFP>(wval);
+      if (!c) {
+	ConstantDataVector *d = dyn_cast<ConstantDataVector>(wval);
+	if (d && dyn_cast<ConstantFP>(d->getSplatValue())) {
+	  c = dyn_cast<ConstantFP>(d->getSplatValue());
+	}
+      }
+      if (c) {
+	bool wIsNegative = c->isNegative();
+	if (negative) {
+	  const APFloat &a = c->getValueAPF();
+	  wval = ConstantFP::get(wval->getType(), APFloat::getZero(a.getSemantics()) - a);
+	  wIsNegative = !wIsNegative;
+	}
+	if (wIsNegative) {
+	  wisnegconst = true;
+	} else {
+	  wisposconst = true;
+	}
+      } else {
+	if (negative) wval = builder.CreateFNeg(wval);
+      }
     } else {
       callInst->replaceAllUsesWith(ConstantFP::get(callInst->getType(), 0));
       if (negative) {
 	wval = ConstantFP::get(callInst->getType(), -1);
-	wism1 = true;
+	wism1 = wisnegconst = true;
       } else {
 	wval = ConstantFP::get(callInst->getType(), 1);
-	wis1 = true;
+	wis1 = wisposconst = true;
       }
     }
 
@@ -987,25 +1028,58 @@ struct SimplifyCmpSqrt : public RewriteRule {
     Type *intType = getCorrespondingIntType(fpType, BB);
     Value *signMask = ConstantInt::get(intType, 1UL << (getElementBitWidth(intType) - 1));
 
-    Value *signW = builder.CreateBitCast(wval, intType);
-    signW = builder.CreateAnd(signW, signMask);
+    Value *signbitW = NULL;
+    Value *wsign = builder.CreateBitCast(wval, intType);
+    if (!(wisposconst || wisnegconst)) signbitW = builder.CreateAnd(wsign, signMask);
+    wsign = builder.CreateAShr(wsign, getElementBitWidth(intType) - 1);
 
     Value *zminusy = yval ? builder.CreateFSub(zval, yval) : zval;
-    Value *sTimes_ZMinusY = wis1 ? zminusy : mulSign(zminusy, signW, builder);
+    Value *sTimes_ZMinusY;
+    if (wisposconst) {
+      sTimes_ZMinusY = zminusy;
+    } else if (wisnegconst) {
+      sTimes_ZMinusY = builder.CreateFNeg(zminusy);
+    } else {
+      sTimes_ZMinusY = mulSign(zminusy, signbitW, builder);
+    }
 
     Value *cmpSTimes_ZMinusY = builder.CreateFCmpOGE(sTimes_ZMinusY, ConstantFP::get(fpType, 0));
 
     Value *sTimes_ZMinusYSqu = builder.CreateFMul(sTimes_ZMinusY, zminusy);
 
-    Value *wtimesw = (wis1 || wism1) ? NULL : builder.CreateFMul(wval, wval);
+    Value *wtimesw = NULL;
+    if (wis1 || wism1) {
+      wtimesw = NULL;
+    } else if (wisposconst || wisnegconst) {
+      ConstantFP *c = dyn_cast<ConstantFP>(wval);
+      if (c) {
+	const APFloat &a = c->getValueAPF();
+	wtimesw = ConstantFP::get(wval->getType(), a*a);
+      }
+
+      ConstantDataVector *d = dyn_cast<ConstantDataVector>(wval);
+      if (d && dyn_cast<ConstantFP>(d->getSplatValue())) {
+	c = dyn_cast<ConstantFP>(d->getSplatValue());
+	const APFloat &a = c->getValueAPF();
+	wtimesw = ConstantFP::get(wval->getType(), a*a);
+      }
+
+      assert(wtimesw);
+    } else {
+      wtimesw = builder.CreateFMul(wval, wval);
+    }
     Value *wwx = (wis1 || wism1) ? xval : builder.CreateFMul(wtimesw, xval);
-    Value *swwx = wis1 ? wwx : mulSign(wwx, signW, builder);
+    Value *swwx;
+    if (wisposconst) {
+      swwx = wwx;
+    } else if (wisnegconst) {
+      swwx = mulSign(wwx, signMask, builder);
+    } else {
+      swwx = mulSign(wwx, signbitW, builder);
+    }
     Value *cmpMain = builder.CreateFCmp(pred, swwx, sTimes_ZMinusYSqu);
 
     Value *andInst1 = builder.CreateAnd(cmpSTimes_ZMinusY, cmpMain);
-
-    Value *wsign = builder.CreateBitCast(wval, intType);
-    wsign = builder.CreateAShr(wsign, getElementBitWidth(intType) - 1);
 
     switch(pred) {
     case CmpInst::Predicate::FCMP_OGT:
@@ -1021,6 +1095,9 @@ struct SimplifyCmpSqrt : public RewriteRule {
       wsign = builder.CreateICmpNE(wsign, ConstantInt::get(intType, 0));
       break;
     default:
+#ifndef NDEBUG
+      errs() << "Abort : SimplifyCmpSqrt::execute\n";
+#endif
       abort();
     }
 
