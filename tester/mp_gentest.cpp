@@ -11,13 +11,15 @@
 
 #define NTEST 100
 #define DEPTHMAX 100
-#define NCHECK 100
+#define NCHECK 1
 
 #define NARGS 4
 #define NBINOP 4
 #define NUOP 2
 #define NLBINOP 2
 #define NCMPOP 6
+
+#define CHECKTHRES 1e-6
 
 using namespace std;
 
@@ -87,12 +89,10 @@ struct BinOp : public Number {
       shared_ptr<Args> a;
       for(int i=0;i<NCHECK;i++) {
 	a = shared_ptr<Args>(new Args());
-	if (fabs(right->eval(*a)) < 1e-4) return false;
-	if (fabs(fabs(left->eval(*a)/right->eval(*a)) - 1.0) < 1e-4) return false;
+	if (right->eval(*a) == 0) return false;
       }
       a = shared_ptr<Args>(new Args(0));
-      if (fabs(right->eval(*a)) < 1e-4) return false;
-      if (fabs(fabs(left->eval(*a)/right->eval(*a)) - 1.0) < 1e-4) return false;
+      if (right->eval(*a) == 0) return false;
     }
     return left->check() && right->check();
   }
@@ -142,7 +142,6 @@ shared_ptr<Number> Number::generate(int depth) {
   if (n < 1 + NARGS + NBINOP + NUOP) return shared_ptr<Number>(new UOp(n - NARGS - 1, generate(depth)));
 
   return shared_ptr<Number>(new Const(randm11()));
-  //abort();
 }
 
 struct LConst : public Logic {
@@ -197,10 +196,10 @@ struct Compare : public Logic {
     shared_ptr<Args> a;
     for(int i=0;i<NCHECK;i++) {
       a = shared_ptr<Args>(new Args());
-      if (fabs(left->eval(*a)-right->eval(*a)) < 1e-4) return false;
+      if (fabs(left->eval(*a)-right->eval(*a)) <= CHECKTHRES) return false;
     }
     a = shared_ptr<Args>(new Args(0));
-    if (fabs(left->eval(*a)-right->eval(*a)) < 1e-4) return false;
+    if (fabs(left->eval(*a)-right->eval(*a)) <= CHECKTHRES) return false;
     return left->check() && right->check();
   }
   string toString() {
@@ -232,7 +231,6 @@ shared_ptr<Logic> Logic::generate(int depth, shared_ptr<Number> num) {
   }
 
   return shared_ptr<Logic>(new LConst(rand() & 1 ? true : false));
-  //abort();
 }
 
 int main(int argc, char **argv) {
