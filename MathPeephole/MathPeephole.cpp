@@ -204,7 +204,7 @@ struct ReduceFraction : public RewriteRule {
     beginning++;
 
     for(int i = beginning;i<seq.size();i++) {
-      if (seq[i]->getNumUses() != 1) return;
+      if (i != beginning && seq[i]->getNumUses() != 1) return;
       BinaryOperator *op = dyn_cast<BinaryOperator>(seq[i]);
       if (!op->getFastMathFlags().isFast()) return;
     }
@@ -863,7 +863,7 @@ struct SimplifyCmpSqrt : public RewriteRule {
     if (cmpInst->isEquality()) return;
 
     for(int i = beginning;i<seq.size();i++) {
-      if (seq[i]->getNumUses() != 1) return;
+      if (i != beginning && seq[i]->getNumUses() != 1) return;
       Instruction *inst = dyn_cast<Instruction>(seq[i]);
       if (!(inst && inst->getFastMathFlags().isFast())) return;
     }
@@ -1172,7 +1172,7 @@ struct Cleanup : public RewriteRule {
     if (beginning == seq.size()-1) return;
 
     for(int i = beginning;i<seq.size();i++) {
-      if (seq[i]->getNumUses() != 1) return;
+      if (i != beginning && seq[i]->getNumUses() != 1) return;
       BinaryOperator *op = dyn_cast<BinaryOperator>(seq[i]);
       if (!op->getFastMathFlags().isFast()) return;
     }
@@ -1487,7 +1487,7 @@ struct MathPeephole : public FunctionPass {
       for(unsigned i=0;i<inst->getNumOperands();i++) {
 	Instruction *inst2 = dyn_cast<Instruction>(inst->getOperand(i));
 	if (inst2 && inst2->getParent() != &BB) continue;
-	if (inst2 && dyn_cast<PHINode>(inst2)) continue;
+	if (inst2 && checkInstOrder(BB, inst, inst2)) continue;
 	seq.push_back(inst->getOperand(i));
 	traverse(BB, seq, eraseList, visited);
 	seq.pop_back();
@@ -1525,10 +1525,11 @@ struct MathPeephole : public FunctionPass {
 	bool isRoot = true;
 	for(User *u : inst->users()) {
 	  Instruction *inst2 = dyn_cast<Instruction>(u);
-	  if (inst2 && inst2->getParent() == &BB) {
-	    isRoot = false;
-	    break;
-	  }
+	  if (!inst2) continue;
+	  if (inst2->getParent() != &BB) continue;
+	  if (checkInstOrder(BB, inst2, inst)) continue;
+	  isRoot = false;
+	  break;
 	}
 	if (!isRoot) continue;
 	if (inst->getNumOperands() == 0) continue;
