@@ -45,6 +45,8 @@ foreach(TYPE DOUBLE FLOAT DOUBLE2 FLOAT4)
   add_test(NAME "MathPeephole1_${TYPE}" COMMAND mp_tester_${lctype})
 endforeach()
 
+#
+
 add_executable(mp_check mp_check.c)
 add_dependencies(mp_check MathPeephole_generated)
 target_compile_options(mp_check PRIVATE
@@ -52,3 +54,18 @@ target_compile_options(mp_check PRIVATE
   "SHELL:-Xclang -load -Xclang ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:${TARGET_MATHPEEPHOLE}>")
 
 add_test(NAME "MathPeephole2" COMMAND mp_check)
+
+#
+
+add_custom_target(check_ll ALL
+  DEPENDS ${TARGET_MATHPEEPHOLE}
+  COMMAND ${CMAKE_C_COMPILER} "-O1" "-ffast-math" "-emit-llvm" "-S"
+  ${CMAKE_CURRENT_SOURCE_DIR}/check.ll "-o" "${CMAKE_BINARY_DIR}/check_out.ll"
+  "-Xclang" "-load" "-Xclang" "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:${TARGET_MATHPEEPHOLE}>"
+  )
+
+find_program(FILECHECK_COMMAND NAMES FileCheck FileCheck-10)
+
+if (FILECHECK_COMMAND)
+  add_test(NAME MP_FileCheck COMMAND ${FILECHECK_COMMAND} ${CMAKE_CURRENT_SOURCE_DIR}/check.ll --input-file ${CMAKE_BINARY_DIR}/check_out.ll)
+endif()
