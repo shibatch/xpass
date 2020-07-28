@@ -69,3 +69,27 @@ find_program(FILECHECK_COMMAND NAMES FileCheck FileCheck-10)
 if (FILECHECK_COMMAND)
   add_test(NAME MP_FileCheck COMMAND ${FILECHECK_COMMAND} ${CMAKE_CURRENT_SOURCE_DIR}/check.ll --input-file ${CMAKE_BINARY_DIR}/check_out.ll)
 endif()
+
+#
+
+option(FLAGS_FOR_BENCHMARK "Compiler flags for benchmark" "-O3")
+
+add_executable(bench_latency_wo microbench.cpp)
+target_compile_options(bench_latency_wo PRIVATE -ffast-math ${FLAGS_FOR_BENCHMARK})
+target_compile_definitions(bench_latency_wo PRIVATE LATENCY=1)
+
+add_executable(bench_throughput_wo microbench.cpp)
+target_compile_options(bench_throughput_wo PRIVATE -ffast-math ${FLAGS_FOR_BENCHMARK})
+target_compile_definitions(bench_throughput_wo PRIVATE THROUGHPUT=1)
+
+add_executable(bench_latency_w microbench.cpp)
+target_compile_options(bench_latency_w PRIVATE -ffast-math ${FLAGS_FOR_BENCHMARK}
+  "SHELL:-Xclang -load -Xclang ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:${TARGET_MATHPEEPHOLE}>")
+target_compile_definitions(bench_latency_w PRIVATE LATENCY=1)
+add_dependencies(bench_latency_w MathPeephole_generated)
+
+add_executable(bench_throughput_w microbench.cpp)
+target_compile_options(bench_throughput_w PRIVATE -ffast-math ${FLAGS_FOR_BENCHMARK}
+  "SHELL:-Xclang -load -Xclang ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:${TARGET_MATHPEEPHOLE}>")
+target_compile_definitions(bench_throughput_w PRIVATE THROUGHPUT=1)
+add_dependencies(bench_throughput_w MathPeephole_generated)
