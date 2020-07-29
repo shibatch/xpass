@@ -111,10 +111,10 @@ Type *getCorrespondingIntType(Type *fpType, BasicBlock &BB) {
   }
 }
 
-Type *getCorrespondingLogicType(Type *fpType, BasicBlock &BB) {
-  if (!fpType->isVectorTy()) return Type::getInt1Ty(BB.getContext());
+Type *getCorrespondingLogicType(Type *type, BasicBlock &BB) {
+  if (!type->isVectorTy()) return Type::getInt1Ty(BB.getContext());
 
-  VectorType *vt = dyn_cast<VectorType>(fpType);
+  VectorType *vt = dyn_cast<VectorType>(type);
   ElementCount ec = vt->getElementCount();
   return VectorType::get(Type::getInt1Ty(BB.getContext()), ec);
 }
@@ -152,16 +152,65 @@ Value *mulSign(Value *fpval, Value *intSign, IRBuilder<> &builder) {
   return builder.CreateBitCast(v, fpval->getType());
 }
 
+bool isNonNegative(Value *v);
+
+bool isNegative(Value *v) {
+  ConstantFP *c = dyn_cast<ConstantFP>(v);
+  if (c) return c->isNegative();
+
+  BinaryOperator *binOp = dyn_cast<BinaryOperator>(v);
+  if (binOp && binOp->getOpcode() == Instruction::FAdd) {
+    if (isNegative(binOp->getOperand(0)) &&
+	isNegative(binOp->getOperand(1))) return true;
+  }
+
+  if (binOp && binOp->getOpcode() == Instruction::FSub) {
+    if (isNegative(binOp->getOperand(0)) &&
+	isNonNegative(binOp->getOperand(1))) return true;
+  }
+
+  UnaryOperator *uOp = dyn_cast<UnaryOperator>(v);
+  if (uOp && uOp->getOpcode() == Instruction::FNeg) {
+    if (isNonNegative(uOp->getOperand(0))) return true;
+  }
+
+  return false;
+}
+
 bool isNonNegative(Value *v) {
   CallInst *callInst = dyn_cast<CallInst>(v);
   if (callInst) {
     Function *calledFunc = callInst->getCalledFunction();
     if (calledFunc && calledFunc->getIntrinsicID() == Intrinsic::sqrt) return true;
+    if (calledFunc && calledFunc->getIntrinsicID() == Intrinsic::fabs) return true;
   }
+
+  ConstantFP *c = dyn_cast<ConstantFP>(v);
+  if (c) return !c->isNegative();
 
   BinaryOperator *binOp = dyn_cast<BinaryOperator>(v);
   if (binOp && binOp->getOpcode() == Instruction::FMul) {
     if (binOp->getOperand(0) == binOp->getOperand(1)) return true;
+    if (isNonNegative(binOp->getOperand(0)) &&
+	isNonNegative(binOp->getOperand(1))) return true;
+
+    if (isNegative(binOp->getOperand(0)) &&
+	isNegative(binOp->getOperand(1))) return true;
+  }
+
+  if (binOp && binOp->getOpcode() == Instruction::FAdd) {
+    if (isNonNegative(binOp->getOperand(0)) &&
+	isNonNegative(binOp->getOperand(1))) return true;
+  }
+
+  if (binOp && binOp->getOpcode() == Instruction::FSub) {
+    if (isNonNegative(binOp->getOperand(0)) &&
+	isNegative(binOp->getOperand(1))) return true;
+  }
+
+  UnaryOperator *uOp = dyn_cast<UnaryOperator>(v);
+  if (uOp && uOp->getOpcode() == Instruction::FNeg) {
+    if (isNegative(uOp->getOperand(0))) return true;
   }
 
   return false;
@@ -758,10 +807,9 @@ struct SimplifyCmpDiv : public RewriteRule {
 
     Value *signBit = NULL;
 
-    if (!bvalIsPositive || (negativeB ^ dvalOnLeft)) {
+    if (!bvalIsPositive) {
       Value *bitCast1 = builder.CreateBitCast(bval, intType);
       signBit = builder.CreateAnd(bitCast1, signMask);
-      if (negativeB ^ dvalOnLeft) signBit = builder.CreateXor(signBit, signMask);
     }
 
     Value *dminusc = dval;
@@ -800,9 +848,12 @@ struct SimplifyCmpDiv : public RewriteRule {
       }
     } else {
       right = ConstantFP::get(fpType, 0);
+      eraseTree(bval, eraseList);
     }
 
-    Value *cmpInst2 = builder.CreateFCmp(cmpInst->getPredicate(), left, right);
+    CmpInst::Predicate pred = cmpInst->getPredicate();
+    if (negativeB ^ dvalOnLeft) pred = CmpInst::getSwappedPredicate(pred);
+    Value *cmpInst2 = builder.CreateFCmp(pred, left, right);
 
     cmpInst->replaceAllUsesWith(cmpInst2);
 
@@ -953,7 +1004,8 @@ struct SimplifyCmpSqrt : public RewriteRule {
     }
 
     Value *wval = NULL, *xval = callInst->getArgOperand(0);
-    bool wis1 = false, wism1 = false, wisposconst = false, wisnegconst = false;
+    bool wis1 = false, wism1 = false, wisconst = false;
+    bool wispositive = false, wisnegative = false;
     callInst->setArgOperand(0, UndefValue::get(xval->getType()));
 
     if (ar.mtop) {
@@ -992,9 +1044,11 @@ struct SimplifyCmpSqrt : public RewriteRule {
 	  wIsNegative = !wIsNegative;
 	}
 	if (wIsNegative) {
-	  wisnegconst = true;
+	  wisnegative = true;
+	  wisconst = true;
 	} else {
-	  wisposconst = true;
+	  wispositive = true;
+	  wisconst = true;
 	}
       } else {
 	if (negative) wval = builder.CreateFNeg(wval);
@@ -1003,15 +1057,22 @@ struct SimplifyCmpSqrt : public RewriteRule {
       callInst->replaceAllUsesWith(ConstantFP::get(callInst->getType(), 0));
       if (negative) {
 	wval = ConstantFP::get(callInst->getType(), -1);
-	wism1 = wisnegconst = true;
+	wism1 = wisconst = wisnegative = true;
       } else {
 	wval = ConstantFP::get(callInst->getType(), 1);
-	wis1 = wisposconst = true;
+	wis1 = wisconst = wispositive = true;
       }
     }
 
+    wispositive = isNonNegative(wval);
+    wisnegative = isNegative(wval);
+
 #ifdef DEBUG_CMPSQRT
     errs() << "SimplifyCmpSqrt : wval = " << *wval << "\n";
+    errs() << "SimplifyCmpSqrt : wis1 = " << wis1 << ", wism1 = " << wism1 << "\n";
+    errs() << "SimplifyCmpSqrt : wisconst = " << wisconst << "\n";
+    errs() << "SimplifyCmpSqrt : wispositive = " << wispositive << "\n";
+    errs() << "SimplifyCmpSqrt : wisnegative = " << wisnegative << "\n";
     errs() << "SimplifyCmpSqrt : xval = " << *xval << "\n";
     if (yval == NULL) errs() << "SimplifyCmpSqrt : yval = NULL\n";
     else errs() << "SimplifyCmpSqrt : yval = " << *yval << "\n";
@@ -1029,28 +1090,58 @@ struct SimplifyCmpSqrt : public RewriteRule {
     Value *signMask = ConstantInt::get(intType, 1UL << (getElementBitWidth(intType) - 1));
 
     Value *signbitW = NULL;
-    Value *wsign = builder.CreateBitCast(wval, intType);
-    if (!(wisposconst || wisnegconst)) signbitW = builder.CreateAnd(wsign, signMask);
-    wsign = builder.CreateAShr(wsign, getElementBitWidth(intType) - 1);
+    Value *wsign = NULL;
+    if (!(wispositive || wisnegative)) {
+      wsign = builder.CreateBitCast(wval, intType);
+      wsign = builder.CreateAShr(wsign, getElementBitWidth(intType) - 1);
+      signbitW = builder.CreateAnd(wsign, signMask);
+    }
 
     Value *zminusy = yval ? builder.CreateFSub(zval, yval) : zval;
     Value *sTimes_ZMinusY;
-    if (wisposconst) {
+    if (wispositive) {
       sTimes_ZMinusY = zminusy;
-    } else if (wisnegconst) {
+    } else if (wisnegative) {
       sTimes_ZMinusY = builder.CreateFNeg(zminusy);
     } else {
       sTimes_ZMinusY = mulSign(zminusy, signbitW, builder);
     }
 
-    Value *cmpSTimes_ZMinusY = builder.CreateFCmpOGE(sTimes_ZMinusY, ConstantFP::get(fpType, 0));
+    Value *cmpSTimes_ZMinusY = NULL;
+    if (isNonNegative(sTimes_ZMinusY)) {
+      cmpSTimes_ZMinusY = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 1);
+    } else if (isNegative(sTimes_ZMinusY)) {
+      cmpSTimes_ZMinusY = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 0);
+    } else {
+      cmpSTimes_ZMinusY = builder.CreateFCmpOGE(sTimes_ZMinusY, ConstantFP::get(fpType, 0));
+    }
 
-    Value *sTimes_ZMinusYSqu = builder.CreateFMul(sTimes_ZMinusY, zminusy);
+    Value *sTimes_ZMinusYSqu = NULL;
+
+    if (sTimes_ZMinusY == zminusy) {
+      CallInst *callInst3 = dyn_cast<CallInst>(zminusy);
+      if (callInst3) {
+	Function *calledFunc = callInst3->getCalledFunction();
+	if (calledFunc && calledFunc->getIntrinsicID() == Intrinsic::sqrt) {
+	  sTimes_ZMinusYSqu = callInst3->getArgOperand(0);
+	  if (callInst3->getNumUses() <= 1) {
+	    callInst3->setArgOperand(0, UndefValue::get(sTimes_ZMinusYSqu->getType()));
+	    callInst3->replaceAllUsesWith(ConstantFP::get(callInst3->getType(), 0));
+	    assert(callInst3->getNumUses() == 0);
+	    eraseList.insert(callInst3);
+	  }
+	}
+      }
+    }
+
+    if (sTimes_ZMinusYSqu == NULL) {
+      sTimes_ZMinusYSqu = builder.CreateFMul(sTimes_ZMinusY, zminusy);
+    }
 
     Value *wtimesw = NULL;
     if (wis1 || wism1) {
       wtimesw = NULL;
-    } else if (wisposconst || wisnegconst) {
+    } else if (wisconst) {
       ConstantFP *c = dyn_cast<ConstantFP>(wval);
       if (c) {
 	const APFloat &a = c->getValueAPF();
@@ -1070,10 +1161,10 @@ struct SimplifyCmpSqrt : public RewriteRule {
     }
     Value *wwx = (wis1 || wism1) ? xval : builder.CreateFMul(wtimesw, xval);
     Value *swwx;
-    if (wisposconst) {
+    if (wispositive) {
       swwx = wwx;
-    } else if (wisnegconst) {
-      swwx = mulSign(wwx, signMask, builder);
+    } else if (wisnegative) {
+      swwx = builder.CreateFNeg(wwx);
     } else {
       swwx = mulSign(wwx, signbitW, builder);
     }
@@ -1086,13 +1177,25 @@ struct SimplifyCmpSqrt : public RewriteRule {
     case CmpInst::Predicate::FCMP_UGT:
     case CmpInst::Predicate::FCMP_OGE:
     case CmpInst::Predicate::FCMP_UGE:
-      wsign = builder.CreateICmpEQ(wsign, ConstantInt::get(intType, 0));
+      if (wispositive) {
+	wsign = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 1);
+      } else if (wisnegative) {
+	wsign = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 0);
+      } else {
+	wsign = builder.CreateICmpEQ(wsign, ConstantInt::get(intType, 0));
+      }
       break;
     case CmpInst::Predicate::FCMP_OLT:
     case CmpInst::Predicate::FCMP_ULT:
     case CmpInst::Predicate::FCMP_OLE:
     case CmpInst::Predicate::FCMP_ULE:
-      wsign = builder.CreateICmpNE(wsign, ConstantInt::get(intType, 0));
+      if (wispositive) {
+	wsign = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 0);
+      } else if (wisnegative) {
+	wsign = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 1);
+      } else {
+	wsign = builder.CreateICmpNE(wsign, ConstantInt::get(intType, 0));
+      }
       break;
     default:
 #ifndef NDEBUG
@@ -1144,6 +1247,7 @@ struct Cleanup : public RewriteRule {
   vector<AR_CleanupMulOne>  arlistMulOne  = vector<AR_CleanupMulOne>();
   vector<AR_CleanupAddZero> arlistAddZero = vector<AR_CleanupAddZero>();
   string name() { return "Cleanup"; }
+
   void clear() {
     arlistMulDiv.clear();
     arlistMulOne.clear();
@@ -1481,8 +1585,6 @@ struct MathPeephole : public FunctionPass {
     Instruction *inst = dyn_cast<Instruction>(val);
     if (inst && eraseList.count(inst) != 0) return;
 
-    for(shared_ptr<RewriteRule> rule : rules) rule->match(seq);
-
     if (inst) {
       for(unsigned i=0;i<inst->getNumOperands();i++) {
 	Instruction *inst2 = dyn_cast<Instruction>(inst->getOperand(i));
@@ -1493,6 +1595,8 @@ struct MathPeephole : public FunctionPass {
 	seq.pop_back();
       }
     }
+
+    for(shared_ptr<RewriteRule> rule : rules) rule->match(seq);
   }
 
   bool runOnFunction(Function &F) override {

@@ -4,8 +4,6 @@
 #include <math.h>
 
 bool func0(double w, double x, double y, double z) {
-  // w*sqrt(x) + y >  z  ->  (z <  y) ^ (((w >= 0) ^ (z <  y)) && (w*w*x > (z-y)*(z-y)))
-  // -1 1 -2 -3
   return w * sqrt(x) + y > z;
 }
 

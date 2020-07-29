@@ -72,7 +72,7 @@ endif()
 
 #
 
-option(FLAGS_FOR_BENCHMARK "Compiler flags for benchmark" "-O3")
+set(FLAGS_FOR_BENCHMARK "-O3" CACHE STRING "Compiler flags for benchmark")
 
 add_executable(bench_latency_wo microbench.cpp)
 target_compile_options(bench_latency_wo PRIVATE -ffast-math ${FLAGS_FOR_BENCHMARK})

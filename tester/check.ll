@@ -107,8 +107,20 @@ define dso_local zeroext i1 @complex_1(double %0, double %1, double %2, double %
   %11 = fcmp fast olt double %10, %2
 ; CHECK-NOT: fdiv
 ; CHECK-NOT: sqrt.f64
-; CHECK: ret
   ret i1 %11
+}
+
+; Function Attrs: nounwind readnone uwtable
+define dso_local zeroext i1 @complex_2(double %0, double %1) local_unnamed_addr #1 {
+; CHECK_LABEL: @complex_2
+  %3 = call fast double @llvm.sqrt.f64(double %0)
+  %4 = fdiv fast double 1.000000e+00, %3
+  %5 = call fast double @llvm.sqrt.f64(double %1)
+  %6 = fdiv fast double 1.000000e+00, %5
+  %7 = fcmp fast olt double %4, %6
+; CHECK-NOT: fdiv
+; CHECK-NOT: sqrt.f64
+  ret i1 %7
 }
 
 attributes #0 = { norecurse nounwind readnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="none" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
