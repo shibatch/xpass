@@ -84,7 +84,7 @@ static __attribute__((always_inline)) float8 ternaryf8(int8 b, float8 x, float8 
 
 //
 
-static bool func0(double w, double x, double y, double z) {
+static __attribute__((always_inline)) bool func0(double w, double x, double y, double z) {
   return w * sqrt(x) + y > z;
 }
 
@@ -105,7 +105,7 @@ bool func0loop(double *a0, long n, long m) {
   return b;
 }
 
-static bool func1(double a, double b, double c, double d) {
+static __attribute__((always_inline)) bool func1(double a, double b, double c, double d) {
   return a / b + c > d;
 }
 
@@ -126,7 +126,7 @@ bool func1loop(double *a0, long n, long m) {
   return b;
 }
 
-static bool func2(double a, double b, double c, double d) {
+static __attribute__((always_inline)) bool func2(double a, double b, double c, double d) {
   return 1.2 * sqrt(a / (2.3 * b)) + c < d;
 }
 
@@ -147,8 +147,8 @@ bool func2loop(double *a0, long n, long m) {
   return b;
 }
 
-static bool func3(double a0, double a1, double a2, double a3) {
-  return 1.1 / a0 + a1 / a2 < 1.2 / a3;
+static __attribute__((always_inline)) bool func3(double a0, double a1, double a2, double a3) {
+  return a0 / sqrt(a1) + a2 < a3;
 }
 
 bool func3loop(double *a0, long n, long m) {
@@ -170,7 +170,7 @@ bool func3loop(double *a0, long n, long m) {
 
 //
 
-static long2 v2func0(double2 w, double2 x, double2 y, double2 z) {
+static __attribute__((always_inline)) long2 v2func0(double2 w, double2 x, double2 y, double2 z) {
   return w * sqrt2(x) + y > z;
 }
 
@@ -194,7 +194,7 @@ long2 v2func0loop(double *a0, long n, long m) {
   return b;
 }
 
-static long2 v2func1(double2 a, double2 b, double2 c, double2 d) {
+static __attribute__((always_inline)) long2 v2func1(double2 a, double2 b, double2 c, double2 d) {
   return a / b + c > d;
 }
 
@@ -218,7 +218,7 @@ long2 v2func1loop(double *a0, long n, long m) {
   return b;
 }
 
-static long2 v2func2(double2 a, double2 b, double2 c, double2 d) {
+static __attribute__((always_inline)) long2 v2func2(double2 a, double2 b, double2 c, double2 d) {
   return 1.2 * sqrt2(a / (2.3 * b)) + c < d;
 }
 
@@ -242,8 +242,8 @@ long2 v2func2loop(double *a0, long n, long m) {
   return b;
 }
 
-static long2 v2func3(double2 a0, double2 a1, double2 a2, double2 a3) {
-  return 1.1 / a0 + a1 / a2 < 1.2 / a3;
+static __attribute__((always_inline)) long2 v2func3(double2 a0, double2 a1, double2 a2, double2 a3) {
+  return a0 / sqrt2(a1) + a2 < a3;
 }
 
 long2 v2func3loop(double *a0, long n, long m) {
@@ -268,7 +268,7 @@ long2 v2func3loop(double *a0, long n, long m) {
 
 //
 
-static long4 v4func0(double4 w, double4 x, double4 y, double4 z) {
+static __attribute__((always_inline)) long4 v4func0(double4 w, double4 x, double4 y, double4 z) {
   return w * sqrt4(x) + y > z;
 }
 
@@ -292,7 +292,7 @@ long4 v4func0loop(double *a0, long n, long m) {
   return b;
 }
 
-static long4 v4func1(double4 a, double4 b, double4 c, double4 d) {
+static __attribute__((always_inline)) long4 v4func1(double4 a, double4 b, double4 c, double4 d) {
   return a / b + c > d;
 }
 
@@ -316,7 +316,7 @@ long4 v4func1loop(double *a0, long n, long m) {
   return b;
 }
 
-static long4 v4func2(double4 a, double4 b, double4 c, double4 d) {
+static __attribute__((always_inline)) long4 v4func2(double4 a, double4 b, double4 c, double4 d) {
   return 1.2 * sqrt4(a / (2.3 * b)) + c < d;
 }
 
@@ -340,8 +340,8 @@ long4 v4func2loop(double *a0, long n, long m) {
   return b;
 }
 
-static long4 v4func3(double4 a0, double4 a1, double4 a2, double4 a3) {
-  return 1.1 / a0 + a1 / a2 < 1.2 / a3;
+static __attribute__((always_inline)) long4 v4func3(double4 a0, double4 a1, double4 a2, double4 a3) {
+  return a0 / sqrt4(a1) + a2 < a3;
 }
 
 long4 v4func3loop(double *a0, long n, long m) {
@@ -366,7 +366,7 @@ long4 v4func3loop(double *a0, long n, long m) {
 
 //
 
-static bool funcf0(float w, float x, float y, float z) {
+static __attribute__((always_inline)) bool funcf0(float w, float x, float y, float z) {
   return w * sqrtf(x) + y > z;
 }
 
@@ -387,7 +387,7 @@ bool funcf0loop(float *a0, long n, long m) {
   return b;
 }
 
-static bool funcf1(float a, float b, float c, float d) {
+static __attribute__((always_inline)) bool funcf1(float a, float b, float c, float d) {
   return a / b + c > d;
 }
 
@@ -408,8 +408,8 @@ bool funcf1loop(float *a0, long n, long m) {
   return b;
 }
 
-static bool funcf2(float a, float b, float c, float d) {
-  return 1.2 * sqrtf(a / (2.3 * b)) + c < d;
+static __attribute__((always_inline)) bool funcf2(float a, float b, float c, float d) {
+  return 1.2f * sqrtf(a / (2.3f * b)) + c < d;
 }
 
 bool funcf2loop(float *a0, long n, long m) {
@@ -429,8 +429,8 @@ bool funcf2loop(float *a0, long n, long m) {
   return b;
 }
 
-static bool funcf3(float a0, float a1, float a2, float a3) {
-  return 1.1 / a0 + a1 / a2 < 1.2 / a3;
+static __attribute__((always_inline)) bool funcf3(float a0, float a1, float a2, float a3) {
+  return a0 / sqrtf(a1) + a2 < a3;
 }
 
 bool funcf3loop(float *a0, long n, long m) {
@@ -452,7 +452,7 @@ bool funcf3loop(float *a0, long n, long m) {
 
 //
 
-static int4 v4funcf0(float4 w, float4 x, float4 y, float4 z) {
+static __attribute__((always_inline)) int4 v4funcf0(float4 w, float4 x, float4 y, float4 z) {
   return w * sqrtf4(x) + y > z;
 }
 
@@ -476,7 +476,7 @@ int4 v4funcf0loop(float *a0, long n, long m) {
   return b;
 }
 
-static int4 v4funcf1(float4 a, float4 b, float4 c, float4 d) {
+static __attribute__((always_inline)) int4 v4funcf1(float4 a, float4 b, float4 c, float4 d) {
   return a / b + c > d;
 }
 
@@ -500,8 +500,8 @@ int4 v4funcf1loop(float *a0, long n, long m) {
   return b;
 }
 
-static int4 v4funcf2(float4 a, float4 b, float4 c, float4 d) {
-  return 1.2 * sqrtf4(a / (2.3 * b)) + c < d;
+static __attribute__((always_inline)) int4 v4funcf2(float4 a, float4 b, float4 c, float4 d) {
+  return 1.2f * sqrtf4(a / (2.3f * b)) + c < d;
 }
 
 int4 v4funcf2loop(float *a0, long n, long m) {
@@ -524,8 +524,8 @@ int4 v4funcf2loop(float *a0, long n, long m) {
   return b;
 }
 
-static int4 v4funcf3(float4 a0, float4 a1, float4 a2, float4 a3) {
-  return 1.1 / a0 + a1 / a2 < 1.2 / a3;
+static __attribute__((always_inline)) int4 v4funcf3(float4 a0, float4 a1, float4 a2, float4 a3) {
+  return a0 / sqrtf4(a1) + a2 < a3;
 }
 
 int4 v4funcf3loop(float *a0, long n, long m) {
@@ -550,7 +550,7 @@ int4 v4funcf3loop(float *a0, long n, long m) {
 
 //
 
-static int8 v8funcf0(float8 w, float8 x, float8 y, float8 z) {
+static __attribute__((always_inline)) int8 v8funcf0(float8 w, float8 x, float8 y, float8 z) {
   return w * sqrtf8(x) + y > z;
 }
 
@@ -574,7 +574,7 @@ int8 v8funcf0loop(float *a0, long n, long m) {
   return b;
 }
 
-static int8 v8funcf1(float8 a, float8 b, float8 c, float8 d) {
+static __attribute__((always_inline)) int8 v8funcf1(float8 a, float8 b, float8 c, float8 d) {
   return a / b + c > d;
 }
 
@@ -598,8 +598,8 @@ int8 v8funcf1loop(float *a0, long n, long m) {
   return b;
 }
 
-static int8 v8funcf2(float8 a, float8 b, float8 c, float8 d) {
-  return 1.2 * sqrtf8(a / (2.3 * b)) + c < d;
+static __attribute__((always_inline)) int8 v8funcf2(float8 a, float8 b, float8 c, float8 d) {
+  return 1.2f * sqrtf8(a / (2.3f * b)) + c < d;
 }
 
 int8 v8funcf2loop(float *a0, long n, long m) {
@@ -622,8 +622,8 @@ int8 v8funcf2loop(float *a0, long n, long m) {
   return b;
 }
 
-static int8 v8funcf3(float8 a0, float8 a1, float8 a2, float8 a3) {
-  return 1.1 / a0 + a1 / a2 < 1.2 / a3;
+static __attribute__((always_inline)) int8 v8funcf3(float8 a0, float8 a1, float8 a2, float8 a3) {
+  return a0 / sqrtf8(a1) + a2 < a3;
 }
 
 int8 v8funcf3loop(float *a0, long n, long m) {

@@ -154,18 +154,26 @@ Value *mulSign(Value *fpval, Value *intSign, IRBuilder<> &builder) {
 
 bool isNonNegative(Value *v);
 
-bool isNegative(Value *v) {
+bool isNonPositive(Value *v) {
   ConstantFP *c = dyn_cast<ConstantFP>(v);
   if (c) return c->isNegative();
 
+  if (dyn_cast<ConstantAggregateZero>(v)) return true;
+
+  ConstantDataVector *dvec = dyn_cast<ConstantDataVector>(v);
+  if (dvec) {
+    ConstantFP *c = dvec->getSplatValue() ? dyn_cast<ConstantFP>(dvec->getSplatValue()) : NULL;
+    if (c) return c->isNegative();
+  }
+
   BinaryOperator *binOp = dyn_cast<BinaryOperator>(v);
   if (binOp && binOp->getOpcode() == Instruction::FAdd) {
-    if (isNegative(binOp->getOperand(0)) &&
-	isNegative(binOp->getOperand(1))) return true;
+    if (isNonPositive(binOp->getOperand(0)) &&
+	isNonPositive(binOp->getOperand(1))) return true;
   }
 
   if (binOp && binOp->getOpcode() == Instruction::FSub) {
-    if (isNegative(binOp->getOperand(0)) &&
+    if (isNonPositive(binOp->getOperand(0)) &&
 	isNonNegative(binOp->getOperand(1))) return true;
   }
 
@@ -188,14 +196,22 @@ bool isNonNegative(Value *v) {
   ConstantFP *c = dyn_cast<ConstantFP>(v);
   if (c) return !c->isNegative();
 
+  if (dyn_cast<ConstantAggregateZero>(v)) return true;
+
+  ConstantDataVector *dvec = dyn_cast<ConstantDataVector>(v);
+  if (dvec) {
+    ConstantFP *c = dvec->getSplatValue() ? dyn_cast<ConstantFP>(dvec->getSplatValue()) : NULL;
+    if (c) return !c->isNegative();
+  }
+
   BinaryOperator *binOp = dyn_cast<BinaryOperator>(v);
   if (binOp && binOp->getOpcode() == Instruction::FMul) {
     if (binOp->getOperand(0) == binOp->getOperand(1)) return true;
     if (isNonNegative(binOp->getOperand(0)) &&
 	isNonNegative(binOp->getOperand(1))) return true;
 
-    if (isNegative(binOp->getOperand(0)) &&
-	isNegative(binOp->getOperand(1))) return true;
+    if (isNonPositive(binOp->getOperand(0)) &&
+	isNonPositive(binOp->getOperand(1))) return true;
   }
 
   if (binOp && binOp->getOpcode() == Instruction::FAdd) {
@@ -205,12 +221,12 @@ bool isNonNegative(Value *v) {
 
   if (binOp && binOp->getOpcode() == Instruction::FSub) {
     if (isNonNegative(binOp->getOperand(0)) &&
-	isNegative(binOp->getOperand(1))) return true;
+	isNonPositive(binOp->getOperand(1))) return true;
   }
 
   UnaryOperator *uOp = dyn_cast<UnaryOperator>(v);
   if (uOp && uOp->getOpcode() == Instruction::FNeg) {
-    if (isNegative(uOp->getOperand(0))) return true;
+    if (isNonPositive(uOp->getOperand(0))) return true;
   }
 
   return false;
@@ -1065,7 +1081,7 @@ struct SimplifyCmpSqrt : public RewriteRule {
     }
 
     wispositive = isNonNegative(wval);
-    wisnegative = isNegative(wval);
+    wisnegative = isNonPositive(wval);
 
 #ifdef DEBUG_CMPSQRT
     errs() << "SimplifyCmpSqrt : wval = " << *wval << "\n";
@@ -1110,7 +1126,7 @@ struct SimplifyCmpSqrt : public RewriteRule {
     Value *cmpSTimes_ZMinusY = NULL;
     if (isNonNegative(sTimes_ZMinusY)) {
       cmpSTimes_ZMinusY = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 1);
-    } else if (isNegative(sTimes_ZMinusY)) {
+    } else if (isNonPositive(sTimes_ZMinusY)) {
       cmpSTimes_ZMinusY = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 0);
     } else {
       cmpSTimes_ZMinusY = builder.CreateFCmpOGE(sTimes_ZMinusY, ConstantFP::get(fpType, 0));
