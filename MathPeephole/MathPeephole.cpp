@@ -1109,8 +1109,8 @@ struct SimplifyCmpSqrt : public RewriteRule {
     Value *wsign = NULL;
     if (!(wispositive || wisnegative)) {
       wsign = builder.CreateBitCast(wval, intType);
-      wsign = builder.CreateAShr(wsign, getElementBitWidth(intType) - 1);
       signbitW = builder.CreateAnd(wsign, signMask);
+      wsign = builder.CreateAShr(wsign, getElementBitWidth(intType) - 1);
     }
 
     Value *zminusy = yval ? builder.CreateFSub(zval, yval) : zval;
@@ -1198,7 +1198,12 @@ struct SimplifyCmpSqrt : public RewriteRule {
       } else if (wisnegative) {
 	wsign = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 0);
       } else {
-	wsign = builder.CreateICmpEQ(wsign, ConstantInt::get(intType, 0));
+	if (intType->isVectorTy()) {
+	  wsign = builder.CreateICmpEQ(wsign, ConstantInt::get(intType, 0));
+	} else {
+	  wsign = builder.CreateIntCast(wsign, Type::getInt1Ty(BB.getContext()), true);
+	  wsign = builder.CreateNot(wsign);
+	}
       }
       break;
     case CmpInst::Predicate::FCMP_OLT:
@@ -1210,7 +1215,11 @@ struct SimplifyCmpSqrt : public RewriteRule {
       } else if (wisnegative) {
 	wsign = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 1);
       } else {
-	wsign = builder.CreateICmpNE(wsign, ConstantInt::get(intType, 0));
+	if (intType->isVectorTy()) {
+	  wsign = builder.CreateICmpEQ(wsign, ConstantInt::get(intType, 0));
+	} else {
+	  wsign = builder.CreateIntCast(wsign, Type::getInt1Ty(BB.getContext()), true);
+	}
       }
       break;
     default:
