@@ -1216,7 +1216,7 @@ struct SimplifyCmpSqrt : public RewriteRule {
 	wsign = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 1);
       } else {
 	if (intType->isVectorTy()) {
-	  wsign = builder.CreateICmpEQ(wsign, ConstantInt::get(intType, 0));
+	  wsign = builder.CreateICmpNE(wsign, ConstantInt::get(intType, 0));
 	} else {
 	  wsign = builder.CreateIntCast(wsign, Type::getInt1Ty(BB.getContext()), true);
 	}
