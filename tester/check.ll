@@ -1,10 +1,8 @@
 ; ModuleID = 'check.c'
 source_filename = "check.c"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
-target triple = "x86_64-pc-linux-gnu"
 
 ; Function Attrs: norecurse nounwind readnone uwtable
-;
 define dso_local double @reduction_0(double %0, double %1, double %2, double %3) local_unnamed_addr #0 {
 ; CHECK_LABEL: @reduction_0
   %5 = fdiv fast double %0, %1
@@ -123,9 +121,42 @@ define dso_local zeroext i1 @complex_2(double %0, double %1) local_unnamed_addr 
   ret i1 %7
 }
 
-attributes #0 = { norecurse nounwind readnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="none" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
-attributes #1 = { nounwind readnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="none" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
+; Function Attrs: nounwind readnone speculatable willreturn
+declare <4 x float> @llvm.sqrt.v4f32(<4 x float>) #2
+
+; Function Attrs: nounwind readnone uwtable
+define dso_local <4 x i32> @complexv_1(<4 x float> %0, <4 x float> %1, <4 x float> %2, <4 x float> %3, <4 x float> %4, <4 x float> %5) local_unnamed_addr #3 {
+; CHECK_LABEL: @complexv_1
+  %7 = fmul fast <4 x float> %1, <float 0x4002666660000000, float 0x4002666660000000, float 0x4002666660000000, float 0x4002666660000000>
+  %8 = fdiv fast <4 x float> %0, %7
+  %9 = call fast <4 x float> @llvm.sqrt.v4f32(<4 x float> %8)
+  %10 = fmul fast <4 x float> %9, <float 0x3FF3333340000000, float 0x3FF3333340000000, float 0x3FF3333340000000, float 0x3FF3333340000000>
+  %11 = fcmp fast olt <4 x float> %10, %2
+  %12 = sext <4 x i1> %11 to <4 x i32>
+; CHECK-NOT: fdiv
+; CHECK-NOT: llvm.sqrt
+  ret <4 x i32> %12
+}
+
+; Function Attrs: nounwind readnone uwtable
+define dso_local <4 x i32> @complexv_2(<4 x float> %0, <4 x float> %1) local_unnamed_addr #3 {
+; CHECK_LABEL: @complexv_2
+  %3 = call fast <4 x float> @llvm.sqrt.v4f32(<4 x float> %0)
+  %4 = fdiv fast <4 x float> <float 1.000000e+00, float 1.000000e+00, float 1.000000e+00, float 1.000000e+00>, %3
+  %5 = call fast <4 x float> @llvm.sqrt.v4f32(<4 x float> %1)
+  %6 = fdiv fast <4 x float> <float 1.000000e+00, float 1.000000e+00, float 1.000000e+00, float 1.000000e+00>, %5
+  %7 = fcmp fast olt <4 x float> %4, %6
+  %8 = sext <4 x i1> %7 to <4 x i32>
+; CHECK-NOT: fdiv
+; CHECK-NOT: llvm.sqrt
+  ret <4 x i32> %8
+; CHECK: ret
+}
+
+attributes #0 = { norecurse nounwind readnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="none" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="true" "use-soft-float"="false" }
+attributes #1 = { nounwind readnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="none" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="true" "use-soft-float"="false" }
 attributes #2 = { nounwind readnone speculatable willreturn }
+attributes #3 = { nounwind readnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="none" "less-precise-fpmad"="false" "min-legal-vector-width"="128" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="true" "use-soft-float"="false" }
 
 !llvm.module.flags = !{!0}
 !llvm.ident = !{!1}

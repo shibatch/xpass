@@ -59,7 +59,7 @@ add_test(NAME "MathPeephole2" COMMAND mp_check)
 
 add_custom_target(check_ll ALL
   DEPENDS ${TARGET_MATHPEEPHOLE}
-  COMMAND ${CMAKE_C_COMPILER} "-O1" "-ffast-math" "-emit-llvm" "-S"
+  COMMAND ${CMAKE_C_COMPILER} "-O1" "-ffast-math" "-emit-llvm" "-S" "-Wno-override-module"
   ${CMAKE_CURRENT_SOURCE_DIR}/check.ll "-o" "${CMAKE_BINARY_DIR}/check_out.ll"
   "-Xclang" "-load" "-Xclang" "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:${TARGET_MATHPEEPHOLE}>"
   )
