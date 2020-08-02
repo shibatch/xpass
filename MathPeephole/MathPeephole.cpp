@@ -167,6 +167,14 @@ bool isNonPositive(Value *v) {
   }
 
   BinaryOperator *binOp = dyn_cast<BinaryOperator>(v);
+  if (binOp && (binOp->getOpcode() == Instruction::FMul ||
+		binOp->getOpcode() == Instruction::FDiv)) {
+    if (isNonNegative(binOp->getOperand(0)) &&
+	isNonPositive(binOp->getOperand(1))) return true;
+    if (isNonPositive(binOp->getOperand(0)) &&
+	isNonNegative(binOp->getOperand(1))) return true;
+  }
+
   if (binOp && binOp->getOpcode() == Instruction::FAdd) {
     if (isNonPositive(binOp->getOperand(0)) &&
 	isNonPositive(binOp->getOperand(1))) return true;
@@ -205,11 +213,11 @@ bool isNonNegative(Value *v) {
   }
 
   BinaryOperator *binOp = dyn_cast<BinaryOperator>(v);
-  if (binOp && binOp->getOpcode() == Instruction::FMul) {
+  if (binOp && (binOp->getOpcode() == Instruction::FMul ||
+		binOp->getOpcode() == Instruction::FDiv)) {
     if (binOp->getOperand(0) == binOp->getOperand(1)) return true;
     if (isNonNegative(binOp->getOperand(0)) &&
 	isNonNegative(binOp->getOperand(1))) return true;
-
     if (isNonPositive(binOp->getOperand(0)) &&
 	isNonPositive(binOp->getOperand(1))) return true;
   }
@@ -341,19 +349,10 @@ struct ReduceFraction : public RewriteRule {
 
     BinaryOperator *fdivOp0 = dyn_cast<BinaryOperator>((*pseq0)[(*pseq0).size()-1]);
     BinaryOperator *fdivOp1 = dyn_cast<BinaryOperator>((*pseq1)[(*pseq1).size()-1]);
-    
-    for (Instruction &inst : BB) {
-      if (&inst == fdivOp0) break;
-      if (&inst == fdivOp1) {
-	BinaryOperator *t = fdivOp0;
-	fdivOp0 = fdivOp1;
-	fdivOp1 = t;
-	vector<Value *> *p = pseq0;
-	pseq0 = pseq1;
-	pseq1 = p;
-	break;
-      }
-      // fdivOp1 comes later than fdivOp0
+
+    if (checkInstOrder(BB, fdivOp1, fdivOp0)) {
+      swap(fdivOp0, fdivOp1);
+      swap(pseq0, pseq1);
     }
 
     bool negative0 = false;
