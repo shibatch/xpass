@@ -1188,18 +1188,21 @@ struct SimplifyCmpSqrt : public RewriteRule {
 
     Value *andInst1 = builder.CreateAnd(cmpSTimes_ZMinusY, cmpMain);
 
+    Value *andInst2 = NULL;
+
     switch(pred) {
     case CmpInst::Predicate::FCMP_OGT:
     case CmpInst::Predicate::FCMP_UGT:
     case CmpInst::Predicate::FCMP_OGE:
     case CmpInst::Predicate::FCMP_UGE:
       if (wispositive) {
-	wsign = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 1);
+	andInst2 = builder.CreateNot(cmpSTimes_ZMinusY);
       } else if (wisnegative) {
-	wsign = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 0);
       } else {
 	wsign = builder.CreateIntCast(wsign, getCorrespondingLogicType(fpType, BB), true);
 	wsign = builder.CreateNot(wsign);
+	andInst2 = builder.CreateNot(cmpSTimes_ZMinusY);
+	andInst2 = builder.CreateAnd(andInst2, wsign);
       }
       break;
     case CmpInst::Predicate::FCMP_OLT:
@@ -1207,11 +1210,12 @@ struct SimplifyCmpSqrt : public RewriteRule {
     case CmpInst::Predicate::FCMP_OLE:
     case CmpInst::Predicate::FCMP_ULE:
       if (wispositive) {
-	wsign = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 0);
       } else if (wisnegative) {
-	wsign = ConstantInt::get(getCorrespondingLogicType(fpType, BB), 1);
+	andInst2 = builder.CreateNot(cmpSTimes_ZMinusY);
       } else {
 	wsign = builder.CreateIntCast(wsign, getCorrespondingLogicType(fpType, BB), true);
+	andInst2 = builder.CreateNot(cmpSTimes_ZMinusY);
+	andInst2 = builder.CreateAnd(andInst2, wsign);
       }
       break;
     default:
@@ -1221,10 +1225,7 @@ struct SimplifyCmpSqrt : public RewriteRule {
       abort();
     }
 
-    Value *andInst2 = builder.CreateNot(cmpSTimes_ZMinusY);
-    andInst2 = builder.CreateAnd(andInst2, wsign);
-
-    Value *orInst = builder.CreateOr(andInst1, andInst2);
+    Value *orInst = andInst2 ? builder.CreateOr(andInst1, andInst2) : andInst1;
 
     cmpInst->replaceAllUsesWith(orInst);
 
