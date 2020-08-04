@@ -23,7 +23,7 @@
 
 using namespace std;
 
-double rand01() { return rand() / (double)RAND_MAX; }
+double rand01() { return rand() / ((double)RAND_MAX + 1); }
 double randm11() { return rand() / (double)RAND_MAX * 2 - 1; }
 
 string asqrtfunc = "asqrt";
@@ -81,7 +81,7 @@ struct BinOp : public Number {
     case 1: return left->eval(a) - right->eval(a);
     case 2: return left->eval(a) * right->eval(a);
     case 3: return left->eval(a) / right->eval(a);
-    default: abort();
+    default: fprintf(stderr, "gentest aborting(1)\n"); abort();
     }
   }
   bool check() {
@@ -102,7 +102,7 @@ struct BinOp : public Number {
     case 1: return "(" + left->toString() + " - " + right->toString() + ")";
     case 2: return "(" + left->toString() + " * " + right->toString() + ")";
     case 3: return "(" + left->toString() + " / " + right->toString() + ")";
-    default: abort();
+    default: fprintf(stderr, "gentest aborting(2)\n"); abort();
     }
   }
   int countNode() { return left->countNode() + right->countNode() + 1; }
@@ -117,7 +117,7 @@ struct UOp : public Number {
     switch(opcode) {
     case (NBINOP + 0): return -op->eval(a);
     case (NBINOP + 1): return sqrt(fabs(op->eval(a)));
-    default : abort();
+    default : fprintf(stderr, "gentest aborting(3)\n"); abort();
     }
   }
   bool check() { return op->check(); }
@@ -125,7 +125,7 @@ struct UOp : public Number {
     switch(opcode) {
     case (NBINOP + 0): return "(-" + op->toString() + ")";
     case (NBINOP + 1): return asqrtfunc + "(" + op->toString() + ")";
-    default: abort();
+    default: fprintf(stderr, "gentest aborting(4)\n"); abort();
     }
   }
   int countNode() { return op->countNode() + 1; }
@@ -162,7 +162,7 @@ struct LBinOp : public Logic {
     switch(opcode) {
     case (NARGS + NBINOP + NUOP + 0): return left->eval(a) || right->eval(a);
     case (NARGS + NBINOP + NUOP + 1): return left->eval(a) && right->eval(a);
-    default: abort();
+    default: fprintf(stderr, "gentest aborting(5)\n"); abort();
     }
   }
   bool check() { return left->check() && right->check(); }
@@ -170,7 +170,7 @@ struct LBinOp : public Logic {
     switch(opcode) {
     case (NARGS + NBINOP + NUOP + 0): return "(" + left->toString() + " || " + right->toString() + ")";
     case (NARGS + NBINOP + NUOP + 1): return "(" + left->toString() + " && " + right->toString() + ")";
-    default: abort();
+    default: fprintf(stderr, "gentest aborting(6)\n"); abort();
     }
   }
   int countNode() { return left->countNode() + right->countNode() + 1; }
@@ -189,7 +189,7 @@ struct Compare : public Logic {
     case (NARGS + NBINOP + NUOP + NLBINOP + 3): return left->eval(a) >= right->eval(a);
     case (NARGS + NBINOP + NUOP + NLBINOP + 4): return left->eval(a) == right->eval(a);
     case (NARGS + NBINOP + NUOP + NLBINOP + 5): return left->eval(a) != right->eval(a);
-    default: abort();
+    default: fprintf(stderr, "gentest aborting(7)\n"); abort();
     }
   }
   bool check() {
@@ -210,7 +210,7 @@ struct Compare : public Logic {
     case (NARGS + NBINOP + NUOP + NLBINOP + 3): return left->toString() + " >= " + right->toString();
     case (NARGS + NBINOP + NUOP + NLBINOP + 4): return left->toString() + " == " + right->toString();
     case (NARGS + NBINOP + NUOP + NLBINOP + 5): return left->toString() + " != " + right->toString();
-    default: abort();
+    default: fprintf(stderr, "gentest aborting(8)\n"); abort();
     }
   }
   int countNode() { return left->countNode() + right->countNode() + 1; }

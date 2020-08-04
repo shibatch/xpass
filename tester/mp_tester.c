@@ -27,7 +27,10 @@ static double randm11() {
     if (f ## x ## c(a, b, c, d) != f ## x ## t(a, b, c, d)) {	\
       printf(#x "(double) : %g %g %g %g\n", a, b, c, d);	\
       nfail++;							\
-      if (nfail > 20) exit(-1);					\
+      if (nfail > 20) {						\
+	printf("Tester exiting(1)\n");				\
+	exit(-1);						\
+      }								\
     }								\
   } while(0)
 #endif
@@ -39,7 +42,10 @@ static double randm11() {
     if (f ## x ## c(a, b, c, d) != f ## x ## t(a, b, c, d)) {	\
       printf(#x "(float) : %g %g %g %g\n", a, b, c, d);		\
       nfail++;							\
-      if (nfail > 20) exit(-1);					\
+      if (nfail > 20) {						\
+	printf("Tester exiting(2)\n");				\
+	exit(-1);						\
+      }								\
     }								\
   } while(0)
 #endif
@@ -60,7 +66,10 @@ typedef long int2 __attribute__((ext_vector_type(2)));
     if (f ## x ## c(va, vb, vc, vd)[index] != f ## x ## t(va, vb, vc, vd)[index]) { \
 	printf(#x "(double2) : %g %g %g %g\n", va[index], vb[index], vc[index], vd[index]); \
 	nfail++;							\
-	if (nfail > 20) exit(-1);					\
+	if (nfail > 20) {						\
+	  printf("Tester exiting(3)\n");				\
+	  exit(-1);							\
+	}								\
       }									\
   } while(0)
 #endif
@@ -81,7 +90,10 @@ typedef int int4 __attribute__((ext_vector_type(4)));
     if (f ## x ## c(va, vb, vc, vd)[index] != f ## x ## t(va, vb, vc, vd)[index]) { \
 	printf(#x "(float4) : %g %g %g %g\n", va[index], vb[index], vc[index], vd[index]); \
 	nfail++;							\
-	if (nfail > 20) exit(-1);					\
+	if (nfail > 20) {						\
+	  printf("Tester exiting(4)\n");				\
+	  exit(-1);							\
+	}								\
       }									\
   } while(0)
 #endif
@@ -106,7 +118,10 @@ int main(int argc, char **argv) {
     TEST(90); TEST(91); TEST(92); TEST(93); TEST(94); TEST(95); TEST(96); TEST(97); TEST(98); TEST(99);
   }
 
-  if (nfail > 10) exit(-1);
+  if (nfail > 10) {
+    printf("Tester exiting(0)\n");
+    exit(-1);
+  }
 
   exit(0);
 }

@@ -148,7 +148,7 @@ bool func2loop(double *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) bool func3(double a0, double a1, double a2, double a3) {
-  return a0 / sqrt(a1) < 1.2 / (a2 * a2);
+  return a3 / sqrt(a2 / sqrt(a1 / sqrt(1.1 / a0))) < 1.1;
 }
 
 bool func3loop(double *a0, long n, long m) {
@@ -176,7 +176,7 @@ static __attribute__((always_inline)) long2 v2func0(double2 w, double2 x, double
 
 long2 v2func0loop(double *a0, long n, long m) {
   long2 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*2;j>0;j--) {
     double2 *a = (double2 *)a0;
     for(long i=n/2;i>0;i--) {
 #ifdef LATENCY
@@ -200,7 +200,7 @@ static __attribute__((always_inline)) long2 v2func1(double2 a, double2 b, double
 
 long2 v2func1loop(double *a0, long n, long m) {
   long2 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*2;j>0;j--) {
     double2 *a = (double2 *)a0;
     for(long i=n/2;i>0;i--) {
 #ifdef LATENCY
@@ -224,7 +224,7 @@ static __attribute__((always_inline)) long2 v2func2(double2 a, double2 b, double
 
 long2 v2func2loop(double *a0, long n, long m) {
   long2 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*2;j>0;j--) {
     double2 *a = (double2 *)a0;
     for(long i=n/2;i>0;i--) {
 #ifdef LATENCY
@@ -243,12 +243,12 @@ long2 v2func2loop(double *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) long2 v2func3(double2 a0, double2 a1, double2 a2, double2 a3) {
-  return a0 / sqrt2(a1) < 1.2 / (a2 * a2);
+  return a3 / sqrt2(a2 / sqrt2(a1 / sqrt2(1.1 / a0))) < 1.1;
 }
 
 long2 v2func3loop(double *a0, long n, long m) {
   long2 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*2;j>0;j--) {
     double2 *a = (double2 *)a0;
     for(long i=n/2;i>0;i--) {
 #ifdef LATENCY
@@ -274,7 +274,7 @@ static __attribute__((always_inline)) long4 v4func0(double4 w, double4 x, double
 
 long4 v4func0loop(double *a0, long n, long m) {
   long4 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*4;j>0;j--) {
     double4 *a = (double4 *)a0;
     for(long i=n/4;i>0;i--) {
 #ifdef LATENCY
@@ -298,7 +298,7 @@ static __attribute__((always_inline)) long4 v4func1(double4 a, double4 b, double
 
 long4 v4func1loop(double *a0, long n, long m) {
   long4 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*4;j>0;j--) {
     double4 *a = (double4 *)a0;
     for(long i=n/4;i>0;i--) {
 #ifdef LATENCY
@@ -322,7 +322,7 @@ static __attribute__((always_inline)) long4 v4func2(double4 a, double4 b, double
 
 long4 v4func2loop(double *a0, long n, long m) {
   long4 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*4;j>0;j--) {
     double4 *a = (double4 *)a0;
     for(long i=n/4;i>0;i--) {
 #ifdef LATENCY
@@ -341,12 +341,12 @@ long4 v4func2loop(double *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) long4 v4func3(double4 a0, double4 a1, double4 a2, double4 a3) {
-  return a0 / sqrt4(a1) < 1.2 / (a2 * a2);
+  return a3 / sqrt4(a2 / sqrt4(a1 / sqrt4(1.1 / a0))) < 1.1;
 }
 
 long4 v4func3loop(double *a0, long n, long m) {
   long4 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*4;j>0;j--) {
     double4 *a = (double4 *)a0;
     for(long i=n/4;i>0;i--) {
 #ifdef LATENCY
@@ -430,7 +430,7 @@ bool funcf2loop(float *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) bool funcf3(float a0, float a1, float a2, float a3) {
-  return a0 / sqrtf(a1) < 1.2f / (a2 * a2);
+  return a3 / sqrtf(a2 / sqrtf(a1 / sqrtf(1.1f / a0))) < 1.1f;
 }
 
 bool funcf3loop(float *a0, long n, long m) {
@@ -458,7 +458,7 @@ static __attribute__((always_inline)) int4 v4funcf0(float4 w, float4 x, float4 y
 
 int4 v4funcf0loop(float *a0, long n, long m) {
   int4 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*4;j>0;j--) {
     float4 *a = (float4 *)a0;
     for(long i=n/4;i>0;i--) {
 #ifdef LATENCY
@@ -482,7 +482,7 @@ static __attribute__((always_inline)) int4 v4funcf1(float4 a, float4 b, float4 c
 
 int4 v4funcf1loop(float *a0, long n, long m) {
   int4 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*4;j>0;j--) {
     float4 *a = (float4 *)a0;
     for(long i=n/4;i>0;i--) {
 #ifdef LATENCY
@@ -506,7 +506,7 @@ static __attribute__((always_inline)) int4 v4funcf2(float4 a, float4 b, float4 c
 
 int4 v4funcf2loop(float *a0, long n, long m) {
   int4 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*4;j>0;j--) {
     float4 *a = (float4 *)a0;
     for(long i=n/4;i>0;i--) {
 #ifdef LATENCY
@@ -525,12 +525,12 @@ int4 v4funcf2loop(float *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) int4 v4funcf3(float4 a0, float4 a1, float4 a2, float4 a3) {
-  return a0 / sqrtf4(a1) < 1.2f / (a2 * a2);
+  return a3 / sqrtf4(a2 / sqrtf4(a1 / sqrtf4(1.1f / a0))) < 1.1f;
 }
 
 int4 v4funcf3loop(float *a0, long n, long m) {
   int4 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*4;j>0;j--) {
     float4 *a = (float4 *)a0;
     for(long i=n/4;i>0;i--) {
 #ifdef LATENCY
@@ -556,7 +556,7 @@ static __attribute__((always_inline)) int8 v8funcf0(float8 w, float8 x, float8 y
 
 int8 v8funcf0loop(float *a0, long n, long m) {
   int8 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*8;j>0;j--) {
     float8 *a = (float8 *)a0;
     for(long i=n/8;i>0;i--) {
 #ifdef LATENCY
@@ -580,7 +580,7 @@ static __attribute__((always_inline)) int8 v8funcf1(float8 a, float8 b, float8 c
 
 int8 v8funcf1loop(float *a0, long n, long m) {
   int8 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*8;j>0;j--) {
     float8 *a = (float8 *)a0;
     for(long i=n/8;i>0;i--) {
 #ifdef LATENCY
@@ -604,7 +604,7 @@ static __attribute__((always_inline)) int8 v8funcf2(float8 a, float8 b, float8 c
 
 int8 v8funcf2loop(float *a0, long n, long m) {
   int8 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*8;j>0;j--) {
     float8 *a = (float8 *)a0;
     for(long i=n/8;i>0;i--) {
 #ifdef LATENCY
@@ -623,12 +623,12 @@ int8 v8funcf2loop(float *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) int8 v8funcf3(float8 a0, float8 a1, float8 a2, float8 a3) {
-  return a0 / sqrtf8(a1) < 1.2f / (a2 * a2);
+  return a3 / sqrtf8(a2 / sqrtf8(a1 / sqrtf8(1.1f / a0))) < 1.1f;
 }
 
 int8 v8funcf3loop(float *a0, long n, long m) {
   int8 b = 0;
-  for(long j=m;j>0;j--) {
+  for(long j=m*8;j>0;j--) {
     float8 *a = (float8 *)a0;
     for(long i=n/8;i>0;i--) {
 #ifdef LATENCY
@@ -745,28 +745,28 @@ int main(int argc, char **argv) {
   end = std::chrono::system_clock::now();
   std::cout << (l2[0] ^ l2[1]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V2 double sqrt : " << (1e+9 * elapsed_seconds.count() / (N*M/2)) << " nano sec.\n";
+  std::cout << "V2 double sqrt : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   start = std::chrono::system_clock::now();
   l2 = v2func1loop(a, N, M);
   end = std::chrono::system_clock::now();
   std::cout << (l2[0] ^ l2[1]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V2 double div : " << (1e+9 * elapsed_seconds.count() / (N*M/2)) << " nano sec.\n";
+  std::cout << "V2 double div : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   start = std::chrono::system_clock::now();
   l2 = v2func2loop(a, N, M);
   end = std::chrono::system_clock::now();
   std::cout << (l2[0] ^ l2[1]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V2 double combination 1 : " << (1e+9 * elapsed_seconds.count() / (N*M/2)) << " nano sec.\n";
+  std::cout << "V2 double combination 1 : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   start = std::chrono::system_clock::now();
   l2 = v2func3loop(a, N, M);
   end = std::chrono::system_clock::now();
   std::cout << (l2[0] ^ l2[1]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V2 double combination 2 : " << (1e+9 * elapsed_seconds.count() / (N*M/2)) << " nano sec.\n";
+  std::cout << "V2 double combination 2 : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   //
 
@@ -775,28 +775,28 @@ int main(int argc, char **argv) {
   end = std::chrono::system_clock::now();
   std::cout << (i4[0] ^ i4[1] ^ i4[2] ^ i4[3]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V4 float sqrt : " << (1e+9 * elapsed_seconds.count() / (N*M/4)) << " nano sec.\n";
+  std::cout << "V4 float sqrt : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   start = std::chrono::system_clock::now();
   i4 = v4funcf1loop(f, N, M);
   end = std::chrono::system_clock::now();
   std::cout << (i4[0] ^ i4[1] ^ i4[2] ^ i4[3]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V4 float div : " << (1e+9 * elapsed_seconds.count() / (N*M/4)) << " nano sec.\n";
+  std::cout << "V4 float div : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   start = std::chrono::system_clock::now();
   i4 = v4funcf2loop(f, N, M);
   end = std::chrono::system_clock::now();
   std::cout << (i4[0] ^ i4[1] ^ i4[2] ^ i4[3]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V4 float combination 1 : " << (1e+9 * elapsed_seconds.count() / (N*M/4)) << " nano sec.\n";
+  std::cout << "V4 float combination 1 : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   start = std::chrono::system_clock::now();
   i4 = v4funcf3loop(f, N, M);
   end = std::chrono::system_clock::now();
   std::cout << (i4[0] ^ i4[1] ^ i4[2] ^ i4[3]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V4 float combination 2 : " << (1e+9 * elapsed_seconds.count() / (N*M/4)) << " nano sec.\n";
+  std::cout << "V4 float combination 2 : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   //
 
@@ -806,28 +806,28 @@ int main(int argc, char **argv) {
   end = std::chrono::system_clock::now();
   std::cout << (l4[0] ^ l4[1] ^ l4[2] ^ l4[3]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V4 double sqrt : " << (1e+9 * elapsed_seconds.count() / (N*M/4)) << " nano sec.\n";
+  std::cout << "V4 double sqrt : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   start = std::chrono::system_clock::now();
   l4 = v4func1loop(a, N, M);
   end = std::chrono::system_clock::now();
   std::cout << (l4[0] ^ l4[1] ^ l4[2] ^ l4[3]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V4 double div : " << (1e+9 * elapsed_seconds.count() / (N*M/4)) << " nano sec.\n";
+  std::cout << "V4 double div : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   start = std::chrono::system_clock::now();
   l4 = v4func2loop(a, N, M);
   end = std::chrono::system_clock::now();
   std::cout << (l4[0] ^ l4[1] ^ l4[2] ^ l4[3]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V4 double combination 1 : " << (1e+9 * elapsed_seconds.count() / (N*M/4)) << " nano sec.\n";
+  std::cout << "V4 double combination 1 : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   start = std::chrono::system_clock::now();
   l4 = v4func3loop(a, N, M);
   end = std::chrono::system_clock::now();
   std::cout << (l4[0] ^ l4[1] ^ l4[2] ^ l4[3]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V4 double combination 2 : " << (1e+9 * elapsed_seconds.count() / (N*M/4)) << " nano sec.\n";
+  std::cout << "V4 double combination 2 : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   //
 
@@ -836,27 +836,27 @@ int main(int argc, char **argv) {
   end = std::chrono::system_clock::now();
   std::cout << (i8[0] ^ i8[1] ^ i8[2] ^ i8[3] ^ i8[4] ^ i8[5] ^ i8[6] ^ i8[7]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V8 float sqrt : " << (1e+9 * elapsed_seconds.count() / (N*M/8)) << " nano sec.\n";
+  std::cout << "V8 float sqrt : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   start = std::chrono::system_clock::now();
   i8 = v8funcf1loop(f, N, M);
   end = std::chrono::system_clock::now();
   std::cout << (i8[0] ^ i8[1] ^ i8[2] ^ i8[3] ^ i8[4] ^ i8[5] ^ i8[6] ^ i8[7]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V8 float div : " << (1e+9 * elapsed_seconds.count() / (N*M/8)) << " nano sec.\n";
+  std::cout << "V8 float div : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   start = std::chrono::system_clock::now();
   i8 = v8funcf2loop(f, N, M);
   end = std::chrono::system_clock::now();
   std::cout << (i8[0] ^ i8[1] ^ i8[2] ^ i8[3] ^ i8[4] ^ i8[5] ^ i8[6] ^ i8[7]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V8 float combination 1 : " << (1e+9 * elapsed_seconds.count() / (N*M/8)) << " nano sec.\n";
+  std::cout << "V8 float combination 1 : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 
   start = std::chrono::system_clock::now();
   i8 = v8funcf3loop(f, N, M);
   end = std::chrono::system_clock::now();
   std::cout << (i8[0] ^ i8[1] ^ i8[2] ^ i8[3] ^ i8[4] ^ i8[5] ^ i8[6] ^ i8[7]) << "\r";
   elapsed_seconds = end - start;
-  std::cout << "V8 float combination 2 : " << (1e+9 * elapsed_seconds.count() / (N*M/8)) << " nano sec.\n";
+  std::cout << "V8 float combination 2 : " << (1e+9 * elapsed_seconds.count() / (N*M)) << " nano sec.\n";
 #endif
 }
