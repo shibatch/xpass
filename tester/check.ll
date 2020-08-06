@@ -121,6 +121,24 @@ define dso_local zeroext i1 @complex_2(double %0, double %1) local_unnamed_addr 
   ret i1 %7
 }
 
+; Function Attrs: nounwind readnone uwtable
+define dso_local zeroext i1 @complex_3(double %0, double %1, double %2, double %3, double %4, double %5) local_unnamed_addr #1 {
+; CHECK_LABEL: @complex_3
+  %7 = fdiv fast double %0, %1
+  %8 = fadd fast double %2, 1.100000e+00
+  %9 = call fast double @llvm.sqrt.f64(double %8)
+  %10 = fadd fast double %9, %7
+  %11 = fadd fast double %4, 1.200000e+00
+  %12 = fdiv fast double %3, %11
+  %13 = fadd fast double %5, 1.300000e+00
+  %14 = fdiv fast double %13, %0
+  %15 = fadd fast double %14, %12
+  %16 = fcmp fast olt double %10, %15
+; CHECK-NOT: fdiv
+; CHECK-NOT: sqrt.f64
+  ret i1 %16
+}
+
 ; Function Attrs: nounwind readnone speculatable willreturn
 declare <4 x float> @llvm.sqrt.v4f32(<4 x float>) #2
 

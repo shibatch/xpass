@@ -35,6 +35,9 @@ static const int verbose = 0;
 #define ENABLE_CMPZERO
 //#define DEBUG_CMPZERO
 
+#define ENABLE_MULSIGN
+//#define DEBUG_MULSIGN
+
 #define ENABLE_CLEANUP
 //#define DEBUG_CLEANUP
 
@@ -83,7 +86,7 @@ void eraseTree(Value *v, unordered_set<Instruction *> &eraseList) {
 
   for(unsigned i=0;i<inst->getNumOperands();i++) {
     Value *v2 = inst->getOperand(i);
-    inst->setOperand(i, UndefValue::get(inst->getType()));
+    inst->setOperand(i, UndefValue::get(inst->getOperand(i)->getType()));
     eraseTree(v2, eraseList);
   }
 
@@ -142,6 +145,20 @@ bool isFPConstant(Value *val, double d) {
   if (dvec) {
     c = dvec->getSplatValue() ? dyn_cast<ConstantFP>(dvec->getSplatValue()) : NULL;
     if (c) return c->isExactlyValue(d);
+  }
+  return false;
+}
+
+bool isIntConstant(Value *val, unsigned long ul) {
+  ConstantInt *c = dyn_cast<ConstantInt>(val);
+  if (c) return c->getLimitedValue() == ul;
+
+  if (ul == 0 && dyn_cast<ConstantAggregateZero>(val)) return true;
+
+  ConstantDataVector *dvec = dyn_cast<ConstantDataVector>(val);
+  if (dvec) {
+    c = dvec->getSplatValue() ? dyn_cast<ConstantInt>(dvec->getSplatValue()) : NULL;
+    if (c) return c->getLimitedValue() == ul;
   }
   return false;
 }
@@ -636,9 +653,13 @@ struct AR_SimplifyCmpDiv {
 struct SimplifyCmpDiv : public RewriteRule {
   // a/b + c > d -> b < 0 ^ a > b(d - c)
 
+  bool positiveBValOnly = false;
+
   vector<AR_SimplifyCmpDiv> arlist = vector<AR_SimplifyCmpDiv>();
   string name() { return "SimplifyCmpDiv"; }
   void clear() { arlist.clear(); }
+
+  SimplifyCmpDiv(bool b) { positiveBValOnly = b; }
 
   void match(vector<Value *> &seq) {
     // Matches FCmp FAdd* FDiv
@@ -654,6 +675,8 @@ struct SimplifyCmpDiv : public RewriteRule {
       VectorType *vt = dyn_cast<VectorType>(fdivOp->getType());
       if (!vt->getElementType()->isFloatTy() && !vt->getElementType()->isDoubleTy()) return;
     }
+
+    if (positiveBValOnly && !isNonNegative(fdivOp->getOperand(1))) return;
 
     int beginning;
     CmpInst *cmpInst = NULL;
@@ -820,11 +843,14 @@ struct SimplifyCmpDiv : public RewriteRule {
     errs() << "SimplifyCmpDiv : bvalIsPositive = " << bvalIsPositive << "\n";
 #endif
 
-    Value *signBit = NULL;
+    Value *signBit = NULL, *signVal = NULL;
 
     if (!bvalIsPositive) {
       Value *bitCast1 = builder.CreateBitCast(bval, intType);
       signBit = builder.CreateAnd(bitCast1, signMask);
+      signVal = builder.CreateBitCast(ConstantFP::get(fpType, 1), intType);
+      signVal = builder.CreateXor(signVal, signBit);
+      signVal = builder.CreateBitCast(signVal, fpType);
     }
 
     Value *dminusc = dval;
@@ -847,20 +873,12 @@ struct SimplifyCmpDiv : public RewriteRule {
     Value *fmulInst = dminusc ? builder.CreateFMul(bval, dminusc) : NULL;
 
     Value *left = aval;
-    if (signBit) {
-      left = builder.CreateBitCast(aval, intType);
-      left = builder.CreateXor(left, signBit);
-      left = builder.CreateBitCast(left, fpType);
-    }
+    if (signBit) left = builder.CreateFMul(aval, signVal);
 
     Value *right = NULL;
     if (fmulInst) {
       right = fmulInst;
-      if (signBit) {
-	right = builder.CreateBitCast(fmulInst, intType);
-	right = builder.CreateXor(right, signBit);
-	right = builder.CreateBitCast(right, fpType);
-      }
+      if (signBit) right = builder.CreateFMul(fmulInst, signVal);
     } else {
       right = ConstantFP::get(fpType, 0);
       eraseTree(bval, eraseList);
@@ -1104,11 +1122,14 @@ struct SimplifyCmpSqrt : public RewriteRule {
     Type *intType = getCorrespondingIntType(fpType, BB);
     Value *signMask = ConstantInt::get(intType, 1UL << (getElementBitWidth(intType) - 1));
 
-    Value *signbitW = NULL;
+    Value *signbitW = NULL, *signValW = NULL;
     Value *wsign = NULL;
     if (!(wispositive || wisnegative)) {
       wsign = builder.CreateBitCast(wval, intType);
       signbitW = builder.CreateAnd(wsign, signMask);
+      signValW = builder.CreateBitCast(ConstantFP::get(fpType, 1), intType);
+      signValW = builder.CreateXor(signValW, signbitW);
+      signValW = builder.CreateBitCast(signValW, fpType);
       wsign = builder.CreateLShr(wsign, getElementBitWidth(intType) - 1);
     }
 
@@ -1119,7 +1140,7 @@ struct SimplifyCmpSqrt : public RewriteRule {
     } else if (wisnegative) {
       sTimes_ZMinusY = builder.CreateFNeg(zminusy);
     } else {
-      sTimes_ZMinusY = mulSign(zminusy, signbitW, builder);
+      sTimes_ZMinusY = builder.CreateFMul(zminusy, signValW);
     }
 
     Value *cmpSTimes_ZMinusY = NULL;
@@ -1134,7 +1155,7 @@ struct SimplifyCmpSqrt : public RewriteRule {
     Value *sTimes_ZMinusYSqu = NULL;
 
     if (sTimes_ZMinusY == zminusy) {
-      CallInst *callInst3 = dyn_cast<CallInst>(zminusy);
+      CallInst *callInst3 = dyn_cast<CallInst>(sTimes_ZMinusY);
       if (callInst3) {
 	Function *calledFunc = callInst3->getCalledFunction();
 	if (calledFunc && calledFunc->getIntrinsicID() == Intrinsic::sqrt) {
@@ -1181,7 +1202,7 @@ struct SimplifyCmpSqrt : public RewriteRule {
     } else if (wisnegative) {
       swwx = builder.CreateFNeg(wwx);
     } else {
-      swwx = mulSign(wwx, signbitW, builder);
+      swwx = builder.CreateFMul(wwx, signValW);
     }
     Value *cmpMain = builder.CreateFCmp(pred, swwx, sTimes_ZMinusYSqu);
 
@@ -1257,18 +1278,32 @@ struct AR_CleanupAddZero {
   bool isFSub = false;
 };
 
+struct AR_CleanupSquSqrt {
+  BinaryOperator *mulOp = NULL;
+  CallInst *callInst = NULL;
+};
+
+struct AR_CleanupNegSub {
+  UnaryOperator *negOp = NULL;
+  BinaryOperator *subOp = NULL;
+};
+
 struct Cleanup : public RewriteRule {
   // (a / b) * c -> (a * c) / b
 
   vector<AR_CleanupMulDiv>  arlistMulDiv  = vector<AR_CleanupMulDiv>();
   vector<AR_CleanupMulOne>  arlistMulOne  = vector<AR_CleanupMulOne>();
   vector<AR_CleanupAddZero> arlistAddZero = vector<AR_CleanupAddZero>();
+  vector<AR_CleanupSquSqrt> arlistSquSqrt = vector<AR_CleanupSquSqrt>();
+  vector<AR_CleanupNegSub>  arlistNegSub  = vector<AR_CleanupNegSub>();
   string name() { return "Cleanup"; }
 
   void clear() {
     arlistMulDiv.clear();
     arlistMulOne.clear();
     arlistAddZero.clear();
+    arlistSquSqrt.clear();
+    arlistNegSub.clear();
   }
 
   void matchMulDiv(vector<Value *> &seq) {
@@ -1379,10 +1414,63 @@ struct Cleanup : public RewriteRule {
     }
   }
 
+  void matchSquSqrt(vector<Value *> &seq) {
+    CallInst *callInst = dyn_cast<CallInst>(seq[seq.size()-1]);
+    if (!callInst) return;
+    if (!callInst->getFastMathFlags().isFast()) return;
+    Function *calledFunc = callInst->getCalledFunction();
+    if (!(calledFunc && calledFunc->getIntrinsicID() == Intrinsic::sqrt)) return;
+
+    int i;
+    for(i = seq.size()-2;i >= 0;i--) {
+      BinaryOperator *op = dyn_cast<BinaryOperator>(seq[i]);
+      if (op && !op->getFastMathFlags().isFast()) return;
+      if (!(op && op->getOpcode() == Instruction::FMul)) return;
+      if (op->getOperand(0) == op->getOperand(1)) break;
+    }
+    if (i == -1) return;
+
+    BinaryOperator *mulOp = dyn_cast<BinaryOperator>(seq[i]);
+
+    if (seq[i+1]->getNumUses() != 2) return;
+    for(i+=2;i < seq.size();i++)
+      if (seq[i]->getNumUses() != 1) return;
+
+    AR_CleanupSquSqrt ar;
+    ar.mulOp = mulOp;
+    ar.callInst = callInst;
+    arlistSquSqrt.push_back(ar);
+    //errs() << "SquSqrt match\n";
+  }
+
+  void matchNegSub(vector<Value *> &seq) {
+    if (seq.size() < 2) return;
+
+    BinaryOperator *subOp =
+      dyn_cast<BinaryOperator>(seq[seq.size()-1]);
+
+    if (!(subOp && (subOp->getOpcode() == Instruction::FSub))) return;
+    if (subOp->getNumUses() != 1) return;
+
+    UnaryOperator *negOp =
+      dyn_cast<UnaryOperator>(seq[seq.size()-2]);
+
+    if (!(negOp && (negOp->getOpcode() == Instruction::FNeg))) return;
+
+    assert(negOp->getOperand(0) == subOp);
+
+    AR_CleanupNegSub ar;
+    ar.subOp = subOp;
+    ar.negOp = negOp;
+    arlistNegSub.push_back(ar);
+  }
+
   void match(vector<Value *> &seq) {
     matchMulDiv(seq);
     matchMulOne(seq);
     matchAddZero(seq);
+    matchSquSqrt(seq);
+    matchNegSub(seq);
   }
 
   bool executeMulDiv(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
@@ -1462,11 +1550,58 @@ struct Cleanup : public RewriteRule {
     return changed;
   }
 
+  bool executeSquSqrt(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
+    bool changed = false;
+
+    for(AR_CleanupSquSqrt &ar : arlistSquSqrt) {
+      ar.callInst->replaceAllUsesWith(ConstantFP::get(ar.mulOp->getType(), 1.0));
+
+      IRBuilder<> builder(ar.mulOp->getNextNonDebugInstruction());
+      BinaryOperator *mulOp2 = dyn_cast<BinaryOperator>(
+        builder.CreateFMul(UndefValue::get(ar.mulOp->getType()), ar.callInst->getArgOperand(0)));
+
+      ar.mulOp->replaceAllUsesWith(mulOp2);
+      mulOp2->setOperand(0, ar.mulOp);
+
+      ar.callInst->setArgOperand(0, UndefValue::get(ar.mulOp->getType()));
+      eraseList.insert(ar.callInst);
+
+      nRewrite++;
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  bool executeNegSub(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
+    bool changed = false;
+
+    for(AR_CleanupNegSub &ar : arlistNegSub) {
+      IRBuilder<> builder(ar.negOp);
+      Value *subOp2 = builder.CreateFSub(ar.subOp->getOperand(1), ar.subOp->getOperand(0));
+      ar.negOp->replaceAllUsesWith(subOp2);
+
+      ar.subOp->setOperand(0, UndefValue::get(ar.subOp->getType()));
+      ar.subOp->setOperand(1, UndefValue::get(ar.subOp->getType()));
+      eraseList.insert(ar.subOp);
+
+      ar.negOp->setOperand(0, UndefValue::get(ar.negOp->getType()));
+      eraseList.insert(ar.negOp);
+
+      nRewrite++;
+      changed = true;
+    }
+
+    return changed;
+  }
+
   bool execute(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
     bool changed = false;
-    changed = executeMulDiv(BB, eraseList) || changed;
-    changed = executeMulOne(BB, eraseList) || changed;
+    changed = executeMulDiv (BB, eraseList) || changed;
+    changed = executeMulOne (BB, eraseList) || changed;
     changed = executeAddZero(BB, eraseList) || changed;
+    changed = executeSquSqrt(BB, eraseList) || changed;
+    changed = executeNegSub (BB, eraseList) || changed;
     return changed;
   }
 };
@@ -1562,6 +1697,119 @@ struct SimplifyCmpZero : public RewriteRule {
 
 //
 
+struct AR_MulSign {
+  Type *fpType, *elementFpType;
+  Type *intType, *elementIntType;
+  BitCastInst *bitCast0, *bitCast1;
+  BinaryOperator *andOp, *xorOp;
+  int bitWidth;
+};
+
+struct MulSign : public RewriteRule {
+  // a - b > 0 -> a > b
+
+  vector<AR_MulSign> arlist = vector<AR_MulSign>();
+  string name() { return "MulSign"; }
+  void clear() { arlist.clear(); }
+
+  void match(vector<Value *> &seq) {
+    //  %18 = bitcast double %16 to i64
+    //  %19 = and i64 %18, -9223372036854775808   // 1UL << 63
+    //  %20 = xor i64 4607182418800017408, %19    // 1.0
+    //  %21 = bitcast i64 %20 to double
+    // (%22 = fmul fast double %17, %21)
+
+    if (seq.size() < 5) return;
+
+    AR_MulSign ar;
+
+    ar.bitCast0 = dyn_cast<BitCastInst>(seq[seq.size()-1]);
+    if (!ar.bitCast0) return;
+
+    ar.bitCast1 = dyn_cast<BitCastInst>(seq[seq.size()-4]);
+    if (!ar.bitCast1) return;
+
+    ar.andOp = dyn_cast<BinaryOperator>(seq[seq.size()-2]);
+    if (!ar.andOp || ar.andOp->getOpcode() != Instruction::And) return;
+
+    ar.xorOp = dyn_cast<BinaryOperator>(seq[seq.size()-3]);
+    if (!ar.xorOp || ar.xorOp->getOpcode() != Instruction::Xor) return;
+    if (ar.xorOp->getNumUses() != 1) return;
+
+    ar.fpType = ar.bitCast0->getSrcTy();
+    ar.elementFpType = getElementType(ar.fpType);
+    ar.intType = ar.bitCast0->getDestTy();
+    ar.elementIntType = getElementType(ar.intType);
+
+    ar.bitWidth = 0;
+
+    if (ar.elementFpType->isFloatTy()  && ar.elementIntType->isIntegerTy(32)) ar.bitWidth = 32;
+    if (ar.elementFpType->isDoubleTy() && ar.elementIntType->isIntegerTy(64)) ar.bitWidth = 64;
+
+    if (ar.bitWidth == 0) return;
+
+    if (!isIntConstant(ar.andOp->getOperand(1), 1UL << (ar.bitWidth-1))) return;
+    if (ar.bitWidth == 64) {
+      if (!isIntConstant(ar.xorOp->getOperand(0), 4607182418800017408UL)) return;
+    } else if (ar.bitWidth == 32) {
+      if (!isIntConstant(ar.xorOp->getOperand(0), 1065353216)) return;
+    } else {
+      return;
+    }
+
+    for(Value::user_iterator u = ar.bitCast1->user_begin();u != ar.bitCast1->user_end();u++) {
+      BinaryOperator *fmulOp = dyn_cast<BinaryOperator>(*u);
+      if (!fmulOp || fmulOp->getOpcode() != Instruction::FMul) return;
+      if (fmulOp->getOperand(1) != ar.bitCast1) return;
+    }
+
+#ifdef DEBUG_MULSIGN
+    errs() << "MulSign match\n";
+    for(int i=seq.size()-5;i<seq.size();i++) errs() << *(seq[i]) << "\n";
+#endif
+
+    arlist.push_back(ar);
+  }
+
+  bool execute(BasicBlock &BB, unordered_set<Instruction *> &eraseList) {
+    bool changed = false;
+
+    vector<Instruction *> eraseList2;
+
+    for(AR_MulSign &ar : arlist) {
+      for(Value::user_iterator u = ar.bitCast1->user_begin();u != ar.bitCast1->user_end();u++) {
+	BinaryOperator *fmulOp = dyn_cast<BinaryOperator>(*u);
+
+	assert(fmulOp && fmulOp->getOpcode() == Instruction::FMul);
+	assert(fmulOp->getOperand(1) == ar.bitCast1);
+
+	IRBuilder<> builder(fmulOp);
+	fmulOp->replaceAllUsesWith(mulSign(fmulOp->getOperand(0), ar.andOp, builder));
+
+	eraseList2.push_back(fmulOp);
+	eraseList2.push_back(ar.bitCast1);
+	eraseList2.push_back(ar.xorOp);
+      }
+
+      nRewrite++;
+      changed = true;
+    }
+
+    for(Instruction *inst : eraseList2) {
+      for(unsigned i=0;i<inst->getNumOperands();i++) {
+	Value *v = inst->getOperand(i);
+	inst->setOperand(i, UndefValue::get(inst->getOperand(i)->getType()));
+      }
+    }
+
+    copy(eraseList2.begin(), eraseList2.end(), inserter(eraseList, eraseList.end()));
+
+    return changed;
+  }
+};
+
+//
+
 struct MathPeephole : public FunctionPass {
   static char ID;
   vector<shared_ptr<RewriteRule>> rules;
@@ -1584,11 +1832,15 @@ struct MathPeephole : public FunctionPass {
 #endif
 
 #ifdef ENABLE_CMPDIV
-    rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpDiv()));
+    rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpDiv(false)));
 #endif
 
 #ifdef ENABLE_CMPSQRT
     rules.push_back(shared_ptr<RewriteRule>(new SimplifyCmpSqrt()));
+#endif
+
+#ifdef ENABLE_MULSIGN
+    rules.push_back(shared_ptr<RewriteRule>(new MulSign()));
 #endif
   }
 
@@ -1699,6 +1951,9 @@ struct MathPeephole : public FunctionPass {
 
     for(Instruction *inst : eraseList) {
       if (verbose >= 3) errs() << "Erasing " << *inst << " with " << inst->getNumUses() << " uses\n";
+#ifndef NDEBUG
+      if (inst->getNumUses() != 0) errs() << *inst << " has " << inst->getNumUses() << " uses\n";
+#endif
       assert(inst->getNumUses() == 0);
       inst->replaceAllUsesWith(UndefValue::get(inst->getType()));
       inst->eraseFromParent();
