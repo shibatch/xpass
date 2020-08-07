@@ -127,7 +127,7 @@ bool func1loop(double *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) bool func2(double a, double b, double c, double d) {
-  return 1.2 * sqrt(a / (2.3 * b)) + c < d;
+  return a / b + sqrt(c + 1.1) < d / (a + 1.2) + (b + 1.3) / c;
 }
 
 bool func2loop(double *a0, long n, long m) {
@@ -148,7 +148,7 @@ bool func2loop(double *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) bool func3(double a0, double a1, double a2, double a3) {
-  return a3 / sqrt(a2 / sqrt(a1 / sqrt(1.1 / a0))) < 1.1;
+  return sqrt(a3 / sqrt(a2 / sqrt(a1 / sqrt(1.1 / a0)))) < 1.1;
 }
 
 bool func3loop(double *a0, long n, long m) {
@@ -219,7 +219,7 @@ long2 v2func1loop(double *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) long2 v2func2(double2 a, double2 b, double2 c, double2 d) {
-  return 1.2 * sqrt2(a / (2.3 * b)) + c < d;
+  return a / b + sqrt2(c + 1.1) < d / (a + 1.2) + (b + 1.3) / c;
 }
 
 long2 v2func2loop(double *a0, long n, long m) {
@@ -243,7 +243,7 @@ long2 v2func2loop(double *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) long2 v2func3(double2 a0, double2 a1, double2 a2, double2 a3) {
-  return a3 / sqrt2(a2 / sqrt2(a1 / sqrt2(1.1 / a0))) < 1.1;
+  return sqrt2(a3 / sqrt2(a2 / sqrt2(a1 / sqrt2(1.1 / a0)))) < 1.1;
 }
 
 long2 v2func3loop(double *a0, long n, long m) {
@@ -317,7 +317,7 @@ long4 v4func1loop(double *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) long4 v4func2(double4 a, double4 b, double4 c, double4 d) {
-  return 1.2 * sqrt4(a / (2.3 * b)) + c < d;
+  return a / b + sqrt4(c + 1.1) < d / (a + 1.2) + (b + 1.3) / c;
 }
 
 long4 v4func2loop(double *a0, long n, long m) {
@@ -341,7 +341,7 @@ long4 v4func2loop(double *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) long4 v4func3(double4 a0, double4 a1, double4 a2, double4 a3) {
-  return a3 / sqrt4(a2 / sqrt4(a1 / sqrt4(1.1 / a0))) < 1.1;
+  return sqrt4(a3 / sqrt4(a2 / sqrt4(a1 / sqrt4(1.1 / a0)))) < 1.1;
 }
 
 long4 v4func3loop(double *a0, long n, long m) {
@@ -409,7 +409,7 @@ bool funcf1loop(float *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) bool funcf2(float a, float b, float c, float d) {
-  return 1.2f * sqrtf(a / (2.3f * b)) + c < d;
+  return a / b + sqrtf(c + 1.1f) < d / (a + 1.2f) + (b + 1.3f) / c;
 }
 
 bool funcf2loop(float *a0, long n, long m) {
@@ -430,7 +430,7 @@ bool funcf2loop(float *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) bool funcf3(float a0, float a1, float a2, float a3) {
-  return a3 / sqrtf(a2 / sqrtf(a1 / sqrtf(1.1f / a0))) < 1.1f;
+  return sqrtf(a3 / sqrtf(a2 / sqrtf(a1 / sqrtf(1.1f / a0)))) < 1.1f;
 }
 
 bool funcf3loop(float *a0, long n, long m) {
@@ -501,7 +501,7 @@ int4 v4funcf1loop(float *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) int4 v4funcf2(float4 a, float4 b, float4 c, float4 d) {
-  return 1.2f * sqrtf4(a / (2.3f * b)) + c < d;
+  return a / b + sqrtf4(c + 1.1f) < d / (a + 1.2f) + (b + 1.3f) / c;
 }
 
 int4 v4funcf2loop(float *a0, long n, long m) {
@@ -525,7 +525,7 @@ int4 v4funcf2loop(float *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) int4 v4funcf3(float4 a0, float4 a1, float4 a2, float4 a3) {
-  return a3 / sqrtf4(a2 / sqrtf4(a1 / sqrtf4(1.1f / a0))) < 1.1f;
+  return sqrtf4(a3 / sqrtf4(a2 / sqrtf4(a1 / sqrtf4(1.1f / a0)))) < 1.1f;
 }
 
 int4 v4funcf3loop(float *a0, long n, long m) {
@@ -599,7 +599,7 @@ int8 v8funcf1loop(float *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) int8 v8funcf2(float8 a, float8 b, float8 c, float8 d) {
-  return 1.2f * sqrtf8(a / (2.3f * b)) + c < d;
+  return a / b + sqrtf8(c + 1.1f) < d / (a + 1.2f) + (b + 1.3f) / c;
 }
 
 int8 v8funcf2loop(float *a0, long n, long m) {
@@ -623,7 +623,7 @@ int8 v8funcf2loop(float *a0, long n, long m) {
 }
 
 static __attribute__((always_inline)) int8 v8funcf3(float8 a0, float8 a1, float8 a2, float8 a3) {
-  return a3 / sqrtf8(a2 / sqrtf8(a1 / sqrtf8(1.1f / a0))) < 1.1f;
+  return sqrtf8(a3 / sqrtf8(a2 / sqrtf8(a1 / sqrtf8(1.1f / a0)))) < 1.1f;
 }
 
 int8 v8funcf3loop(float *a0, long n, long m) {
