@@ -1989,4 +1989,5 @@ static void loadPass(const PassManagerBuilder &Builder, legacy::PassManagerBase 
   PM.add(new MathPeephole());
 }
 
-static RegisterStandardPasses clangtoolLoader_Ox(PassManagerBuilder::EP_OptimizerLast, loadPass);
+static RegisterStandardPasses clangtoolLoader_Ox_1(PassManagerBuilder::EP_VectorizerStart, loadPass);
+static RegisterStandardPasses clangtoolLoader_Ox_0(PassManagerBuilder::EP_OptimizerLast  , loadPass);

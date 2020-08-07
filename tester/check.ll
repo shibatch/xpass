@@ -59,7 +59,6 @@ define dso_local zeroext i1 @cmpsqrt_0(double %0, double %1) local_unnamed_addr 
 
 ; Function Attrs: nounwind readnone speculatable willreturn
 declare double @llvm.sqrt.f64(double) #2
-; CHECK: declare double @llvm.sqrt.f64
 
 ; Function Attrs: nounwind readnone uwtable
 define dso_local zeroext i1 @cmpsqrt_1(double %0, double %1, double %2, double %3, double %4) local_unnamed_addr #1 {
