@@ -1,12 +1,19 @@
 // USAGE : clang-10 -Xclang -load -Xclang libMathPeephole.so -ffast-math -O3 example.c
 // USAGE : opt-10 -load=libMathPeephole.so -O1 -ffast-math -lint -S in.ll -o out.ll
+// USAGE : opt-14 -load-pass-plugin=libMathPeephole.so -passes="math-peephole" ../tester/check.ll -S -o check_out.ll
 
+#include "llvm/Pass.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
-using namespace llvm;
+
+#include "clang/AST/AST.h"
+#include "clang/AST/RecursiveASTVisitor.h"
+#include "clang/Frontend/FrontendPluginRegistry.h"
 
 #include <string>
 #include <memory>
@@ -16,8 +23,12 @@ using namespace llvm;
 #include <cassert>
 #include <cstdlib>
 
+using namespace llvm;
+using namespace std;
+
 //
 
+namespace {
 static const int verbose = 0;
 
 #define ENABLE_REDUCEFRAC
@@ -43,9 +54,6 @@ static const int verbose = 0;
 
 //
 
-using namespace std;
-
-namespace {
 struct RewriteRule {
   int nRewrite;
   virtual string name() { return ""; }
@@ -1808,13 +1816,35 @@ struct MulSign : public RewriteRule {
   }
 };
 
-//
-
-struct MathPeephole : public FunctionPass {
-  static char ID;
+class MathPeepholeMain {
   vector<shared_ptr<RewriteRule>> rules;
 
-  MathPeephole() : FunctionPass(ID) {
+  void traverse(BasicBlock &BB, vector<Value *> &seq, unordered_set<Instruction *> &eraseList, unordered_set<Value *> &visited) {
+    Value *val = seq[seq.size()-1];
+
+    // Visit each instruction only once
+    if (visited.count(val) != 0) return; 
+    visited.insert(val);
+
+    Instruction *inst = dyn_cast<Instruction>(val);
+    if (inst && eraseList.count(inst) != 0) return;
+
+    if (inst) {
+      for(unsigned i=0;i<inst->getNumOperands();i++) {
+	Instruction *inst2 = dyn_cast<Instruction>(inst->getOperand(i));
+	if (inst2 && inst2->getParent() != &BB) continue;
+	if (inst2 && checkInstOrder(BB, inst, inst2)) continue;
+	seq.push_back(inst->getOperand(i));
+	traverse(BB, seq, eraseList, visited);
+	seq.pop_back();
+      }
+    }
+
+    for(shared_ptr<RewriteRule> rule : rules) rule->match(seq);
+  }
+
+public:
+  MathPeepholeMain() {
 #ifdef ENABLE_CLEANUP
     rules.push_back(shared_ptr<RewriteRule>(new Cleanup()));
 #endif
@@ -1844,35 +1874,11 @@ struct MathPeephole : public FunctionPass {
 #endif
   }
 
-  void traverse(BasicBlock &BB, vector<Value *> &seq, unordered_set<Instruction *> &eraseList, unordered_set<Value *> &visited) {
-    Value *val = seq[seq.size()-1];
-
-    // Visit each instruction only once
-    if (visited.count(val) != 0) return; 
-    visited.insert(val);
-
-    Instruction *inst = dyn_cast<Instruction>(val);
-    if (inst && eraseList.count(inst) != 0) return;
-
-    if (inst) {
-      for(unsigned i=0;i<inst->getNumOperands();i++) {
-	Instruction *inst2 = dyn_cast<Instruction>(inst->getOperand(i));
-	if (inst2 && inst2->getParent() != &BB) continue;
-	if (inst2 && checkInstOrder(BB, inst, inst2)) continue;
-	seq.push_back(inst->getOperand(i));
-	traverse(BB, seq, eraseList, visited);
-	seq.pop_back();
-      }
-    }
-
-    for(shared_ptr<RewriteRule> rule : rules) rule->match(seq);
-  }
-
-  bool runOnFunction(Function &F) override {
+  bool run(Function &F) {
     if (F.isDeclaration()) return false;
 
-    if (!F.getAttributes().getFnAttributes().hasAttribute("unsafe-fp-math") ||
-	F.getAttributes().getFnAttributes().getAttribute("unsafe-fp-math").getValueAsString() != "true") {
+    if (!F.getAttributes().getFnAttrs().hasAttribute("unsafe-fp-math") ||
+	F.getAttributes().getFnAttrs().getAttribute("unsafe-fp-math").getValueAsString() != "true") {
       if (verbose >= 3) errs() << "Skipping " << F.getName() << "\n";
       return false;
     }
@@ -1970,24 +1976,34 @@ struct MathPeephole : public FunctionPass {
 
     return changed;
   }
-}; // struct MathPeephole
-}  // namespace
-
-char MathPeephole::ID = 0;
-static RegisterPass<MathPeephole> X("Xmath-peephole", "Mathematical peephole optimization",
-                             false /* Only looks at CFG */,
-                             false /* Analysis Pass */);
-
-static RegisterStandardPasses Y(
-    PassManagerBuilder::EP_OptimizerLast,
-    [](const PassManagerBuilder &Builder,
-       legacy::PassManagerBase &PM) { PM.add(new MathPeephole()); });
+};
+}
 
 //
 
-static void loadPass(const PassManagerBuilder &Builder, legacy::PassManagerBase &PM) {
-  PM.add(new MathPeephole());
+namespace {
+  struct MathPeepholeNew : public PassInfoMixin<MathPeepholeNew> {
+    MathPeepholeMain main;
+
+    PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM) {
+      return main.run(F) ? PreservedAnalyses::none() : PreservedAnalyses::all();
+    }
+
+    static bool isRequired() { return true; }
+  };
 }
 
-static RegisterStandardPasses clangtoolLoader_Ox_1(PassManagerBuilder::EP_VectorizerStart, loadPass);
-static RegisterStandardPasses clangtoolLoader_Ox_0(PassManagerBuilder::EP_OptimizerLast  , loadPass);
+extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo llvmGetPassPluginInfo() {
+  return {LLVM_PLUGIN_API_VERSION, "MathPeephole", LLVM_VERSION_STRING,
+    [](PassBuilder &PB) {
+      PB.registerPipelineParsingCallback(
+					 [](StringRef Name, FunctionPassManager &FPM,
+					    ArrayRef<PassBuilder::PipelineElement>) {
+					   if (Name == "math-peephole") {
+					     FPM.addPass(MathPeepholeNew());
+					     return true;
+					   }
+					   return false;
+					 });
+    }};
+}
